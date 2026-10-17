@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { canonicalKnowledge } from '../../src/content/index.js';
+import {
+  canonicalKnowledge,
+  rawContent,
+  rawExperience,
+  contentForLanguage,
+} from '../../src/content/index.ts';
 const validDate = (value: string) =>
   /^\d{4}-\d{2}-\d{2}$/.test(value) &&
   new Date(value).toISOString().slice(0, 10) === value;
@@ -35,15 +40,6 @@ describe('content references and translation applicability', () => {
       };
       visit(content);
     });
-    it(`${id}: every English override resolves to an existing string`, () => {
-      for (const [path, translation] of Object.entries(content.english)) {
-        let node: unknown = content;
-        for (const key of path.split('.'))
-          node = (node as Record<string, unknown>)[key];
-        expect(typeof node, path).toBe('string');
-        expect(translation.trim().length, path).toBeGreaterThan(0);
-      }
-    });
   }
   it('does not invent measured claim-success rates or real prevention offers', () => {
     expect(
@@ -54,4 +50,42 @@ describe('content references and translation applicability', () => {
     );
     expect(canonicalKnowledge.pet.introOffer.status).toBe('illustrative');
   });
+});
+
+it('bilingual fields travel with their record and require both nonempty languages', () => {
+  const visit = (value: unknown): void => {
+    if (!value || typeof value !== 'object') return;
+    if ('fi' in value || 'en' in value) {
+      expect(Object.keys(value).sort()).toEqual(['en', 'fi']);
+      for (const text of Object.values(value))
+        expect(typeof text === 'string' && text.trim().length > 0).toBe(true);
+    } else for (const child of Object.values(value)) visit(child);
+  };
+  visit(rawContent);
+  visit(rawExperience);
+  const fi = contentForLanguage('fi'),
+    en = contentForLanguage('en');
+  for (const id of Object.keys(fi.knowledge) as (keyof typeof fi.knowledge)[]) {
+    expect(en.knowledge[id].tasks.map((task) => task.id)).toEqual(
+      fi.knowledge[id].tasks.map((task) => task.id),
+    );
+    expect(en.knowledge[id].defaults).toEqual(fi.knowledge[id].defaults);
+    expect(en.knowledge[id].controls.map((control) => control.id)).toEqual(
+      fi.knowledge[id].controls.map((control) => control.id),
+    );
+  }
+});
+
+it('shell annotations and both UI catalogues use known semantic keys', async () => {
+  const { fi, en } = await import('../../src/locales/catalogue');
+  const { readFileSync } = await import('node:fs');
+  expect(Object.keys(en).sort()).toEqual(Object.keys(fi).sort());
+  for (const html of ['index.html', 'personnel.html']) {
+    const source = readFileSync(
+      new URL('../../' + html, import.meta.url),
+      'utf8',
+    );
+    for (const match of source.matchAll(/data-i18n(?:-aria-label)?="([^"]+)"/g))
+      expect(Object.hasOwn(fi, match[1]), match[1]).toBe(true);
+  }
 });

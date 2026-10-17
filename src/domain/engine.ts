@@ -1,165 +1,21 @@
-import type { canonicalKnowledge } from '../content/index.js';
-
-export type Knowledge = typeof canonicalKnowledge;
-export const caseIds = ['new_home', 'absence', 'first_baby', 'pet'] as const;
-export type CaseId = (typeof caseIds)[number];
-export type Audience = 'visitor' | 'customer';
-type Completed = { completedTaskIds: Set<string> };
-export interface AppState {
-  activeCase: CaseId;
-  audience: Audience;
-  portfolioId: string;
-  extraPolicies?: { type: string; label: string }[];
-  cases: {
-    new_home: Omit<
-      Knowledge['new_home']['defaults'],
-      'completedTaskIds' | 'pipeworkYear'
-    > &
-      Completed & {
-        pipeworkYear: number | null;
-        lastKnownPipeworkYear: number;
-      };
-    absence: Omit<
-      Knowledge['absence']['defaults'],
-      'completedTaskIds' | 'assignedTaskIds'
-    > &
-      Completed & { assignedTaskIds: Set<string> };
-    first_baby: Omit<Knowledge['first_baby']['defaults'], 'completedTaskIds'> &
-      Completed;
-    pet: Omit<
-      Knowledge['pet']['defaults'],
-      'completedTaskIds' | 'observations' | 'emergencySignIds'
-    > &
-      Completed & {
-        emergencySignIds: string[];
-        observations: Record<string, string>;
-        introContactUsed: boolean;
-      };
-  };
-}
-export interface Task {
-  id: string;
-  title: string;
-  priority: string;
-  when?: Record<string, unknown>;
-  requiresPolicyType?: string;
-  category?: string;
-  delegatable?: boolean;
-}
-export interface PremiumConfig {
-  preventionIncentive: {
-    status: string;
-    policyId: string;
-    baseAnnualCents: number;
-    bundleDiscountBps: number;
-    preventionCapBps: number;
-    rounding: string;
-    eligibleActions: {
-      id: string;
-      policyId: string;
-      taskId: string;
-      discountBps: number;
-    }[];
-  };
-  tasks: { id: string }[];
-}
-const rate = (value: number) =>
-  Number.isInteger(value) && value >= 0 && value < 10_000;
-
-/** Fictional preview only. Each stage rounds remaining integer cents half-up. */
-export function calculatePreventionPrice(
-  completedTaskIds: Iterable<string> | null,
-  module: PremiumConfig,
-) {
-  const config = module?.preventionIncentive;
-  if (
-    !config ||
-    config.status !== 'illustrative' ||
-    typeof config.policyId !== 'string' ||
-    !config.policyId.trim() ||
-    !Number.isSafeInteger(config.baseAnnualCents) ||
-    config.baseAnnualCents <= 0 ||
-    !rate(config.bundleDiscountBps) ||
-    !rate(config.preventionCapBps) ||
-    config.rounding !== 'half-up-per-stage' ||
-    !Array.isArray(config.eligibleActions) ||
-    !Array.isArray(module.tasks) ||
-    !completedTaskIds ||
-    typeof completedTaskIds === 'string' ||
-    typeof completedTaskIds[Symbol.iterator] !== 'function'
-  )
-    return null;
-  const completed = new Set(completedTaskIds);
-  const taskIds = new Set(module.tasks.map((task) => task.id));
-  const actions = new Map<
-    string,
-    PremiumConfig['preventionIncentive']['eligibleActions'][number]
-  >();
-  const byTask = new Map<
-    string,
-    PremiumConfig['preventionIncentive']['eligibleActions'][number]
-  >();
-  for (const action of config.eligibleActions) {
-    if (!action || typeof action.policyId !== 'string') return null;
-    if (action.policyId !== config.policyId) continue;
-    if (
-      typeof action.id !== 'string' ||
-      !action.id.trim() ||
-      !taskIds.has(action.taskId) ||
-      !rate(action.discountBps)
-    )
-      return null;
-    const existing = actions.get(action.id) || byTask.get(action.taskId);
-    if (existing) {
-      if (
-        existing.id !== action.id ||
-        existing.taskId !== action.taskId ||
-        existing.discountBps !== action.discountBps
-      )
-        return null;
-      continue;
-    }
-    actions.set(action.id, action);
-    byTask.set(action.taskId, action);
-  }
-  let preventionDiscountBps = 0,
-    completedActionCount = 0;
-  for (const action of actions.values()) {
-    if (!completed.has(action.taskId)) continue;
-    preventionDiscountBps = Math.min(
-      config.preventionCapBps,
-      preventionDiscountBps + action.discountBps,
-    );
-    completedActionCount++;
-  }
-  const applyRate = (cents: number, bps: number) =>
-    Number((BigInt(cents) * BigInt(10_000 - bps) + 5_000n) / 10_000n);
-  const afterBundleCents = applyRate(
-    config.baseAnnualCents,
-    config.bundleDiscountBps,
-  );
-  const projectedAnnualCents = applyRate(
-    afterBundleCents,
-    preventionDiscountBps,
-  );
-  if (afterBundleCents <= 0 || projectedAnnualCents <= 0) return null;
-  return {
-    baseAnnualCents: config.baseAnnualCents,
-    bundleDiscountBps: config.bundleDiscountBps,
-    bundleSavingCents: config.baseAnnualCents - afterBundleCents,
-    afterBundleCents,
-    preventionDiscountBps,
-    preventionSavingCents: afterBundleCents - projectedAnnualCents,
-    projectedAnnualCents,
-    completedActionCount,
-    eligibleActionCount: actions.size,
-    preventionCapBps: config.preventionCapBps,
-    approval: 'not-assessed' as const,
-  };
-}
+import type { canonicalExperience } from '../content/index.ts';
+import {
+  caseIds,
+  type Knowledge,
+  type CaseId,
+  type AppState,
+  type Task,
+  type PremiumConfig,
+} from './models';
+import { calculatePreventionPrice } from './pricing';
+export { caseIds } from './models';
+export type { CaseId, Audience, AppState } from './models';
 
 /** All dependencies are injected once; translated presentation data never enters the rules engine. */
-export function createDomain(knowledge: Knowledge) {
+export function createDomain(
+  knowledge: Knowledge,
+  experience: typeof canonicalExperience,
+) {
   function calculateDeduction(
     year: number | null,
     module = knowledge.new_home,
@@ -224,7 +80,7 @@ export function createDomain(knowledge: Knowledge) {
   }
   function currentPolicies(state: AppState) {
     if (state.audience !== 'customer') return [];
-    const portfolio = knowledge.new_home.experience.portfolios.find(
+    const portfolio = experience.portfolios.find(
       (item) => item.id === state.portfolioId,
     );
     return portfolio
@@ -421,7 +277,7 @@ export function createDomain(knowledge: Knowledge) {
   }
   function petServiceAccess(state: AppState) {
     if (state.audience !== 'customer') return 'unknown';
-    const portfolio = knowledge.new_home.experience.portfolios.find(
+    const portfolio = experience.portfolios.find(
       (item) => item.id === state.portfolioId,
     );
     return !portfolio
@@ -462,7 +318,7 @@ export function createDomain(knowledge: Knowledge) {
   function setPortfolio(state: AppState, id: string) {
     if (
       state.audience !== 'customer' ||
-      !knowledge.new_home.experience.portfolios.some((item) => item.id === id)
+      !experience.portfolios.some((item) => item.id === id)
     )
       return false;
     state.portfolioId = id;
@@ -470,7 +326,7 @@ export function createDomain(knowledge: Knowledge) {
   }
   function calculateHomePrice(state: AppState) {
     const module = knowledge.new_home;
-    const portfolio = module.experience.portfolios.find(
+    const portfolio = experience.portfolios.find(
       (item) => item.id === state.portfolioId,
     );
     if (state.audience === 'customer' && !portfolio) return null;
@@ -496,7 +352,7 @@ export function createDomain(knowledge: Knowledge) {
     return { result, nextTask };
   }
   function staffAnalytics({ policyType = 'all', caseId = 'all' } = {}) {
-    const copy = knowledge.new_home.experience.staff;
+    const copy = experience.staff;
     if (
       (policyType !== 'all' &&
         !copy.policyTypes.some((item) => item.id === policyType)) ||
@@ -504,18 +360,26 @@ export function createDomain(knowledge: Knowledge) {
     )
       return null;
     const rows = copy.customers
-      .map((customer) => {
-        const example = createState('customer');
-        example.portfolioId = customer.portfolioId;
-        example.extraPolicies = [];
-        const id = customer.caseId as CaseId;
-        example.cases[id].completedTaskIds = new Set(customer.completedTaskIds);
-        return {
-          ...customer,
-          policies: currentPolicies(example),
-          preparation: readiness(example, id),
-        };
-      })
+      .map(
+        (
+          customer: (typeof copy.customers)[number] & {
+            extraPolicies?: AppState['extraPolicies'];
+          },
+        ) => {
+          const example = createState('customer');
+          example.portfolioId = customer.portfolioId;
+          example.extraPolicies = customer.extraPolicies || [];
+          const id = customer.caseId as CaseId;
+          example.cases[id].completedTaskIds = new Set(
+            customer.completedTaskIds,
+          );
+          return {
+            ...customer,
+            policies: currentPolicies(example),
+            preparation: readiness(example, id),
+          };
+        },
+      )
       .filter(
         (customer) =>
           (policyType === 'all' ||

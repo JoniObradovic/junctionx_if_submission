@@ -10,7 +10,8 @@
     "allowJs": true,
     "checkJs": false,
     "skipLibCheck": true,
-    "types": ["node", "vite/client"]
+    "types": ["node", "vite/client"],
+    "allowImportingTsExtensions": true
   },
   "include": ["src", "tests", "*.config.ts"]
 }

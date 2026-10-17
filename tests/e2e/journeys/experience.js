@@ -7,11 +7,12 @@ const axePath = require.resolve('axe-core/axe.min.js');
 
 export async function experienceJourney(browser, baseURL, artifacts) {
   fs.mkdirSync(artifacts, { recursive: true });
+  let context;
   try {
     console.log(
       `Browser: ${browser.browserType().name()} ${browser.version()}`,
     );
-    const context = await browser.newContext({
+    context = await browser.newContext({
       viewport: { width: 1440, height: 1000 },
     });
     const page = await context.newPage();
@@ -25,7 +26,7 @@ export async function experienceJourney(browser, baseURL, artifacts) {
     page.on('request', (request) => {
       if (
         /^https?:/.test(request.url()) &&
-        !new URL(request.url()).origin.includes('127.0.0.1')
+        new URL(request.url()).origin !== new URL(baseURL).origin
       )
         network.push(request.url());
     });
@@ -425,6 +426,6 @@ export async function experienceJourney(browser, baseURL, artifacts) {
       'PASS: all profile/scenario combinations, single relevant pet contact and emergency precedence, filtered benefits/travel tasks/owned baby cover, independent state, read-only cohort analytics, empty filters, mobile, print and no external requests.',
     );
   } finally {
-    /* Browser lifecycle belongs to Playwright. */
+    await context?.close();
   }
 }

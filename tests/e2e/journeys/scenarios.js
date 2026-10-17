@@ -39,11 +39,12 @@ import fs from 'node:fs';
 
 export async function scenariosJourney(browser, baseURL, artifacts) {
   fs.mkdirSync(artifacts, { recursive: true });
+  let context;
   try {
     console.log(
       `Browser: ${browser.browserType().name()} ${browser.version()}`,
     );
-    const context = await browser.newContext({
+    context = await browser.newContext({
       viewport: { width: 1440, height: 1000 },
     });
     await context.addInitScript(() => {
@@ -75,7 +76,7 @@ export async function scenariosJourney(browser, baseURL, artifacts) {
     page.on('request', (request) => {
       if (
         /^https?:/.test(request.url()) &&
-        !new URL(request.url()).origin.includes('127.0.0.1')
+        new URL(request.url()).origin !== new URL(baseURL).origin
       )
         requests.push(request.url());
     });
@@ -536,6 +537,6 @@ export async function scenariosJourney(browser, baseURL, artifacts) {
       `PASS: all remaining cases over HTTP; absence priorities/dates/delegation, clipboard failure/success/stale result, baby filters/readiness/timing, pet precedence/observations/stale service guard, persistence, mobile, print and accessibility. Artifacts: ${artifacts}`,
     );
   } finally {
-    /* Browser lifecycle belongs to Playwright. */
+    await context?.close();
   }
 }

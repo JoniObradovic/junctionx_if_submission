@@ -1,11 +1,24 @@
+import { createHomeView } from '../features/home/view.js';
+import { createAbsenceView } from '../features/absence/view.js';
+import { createBabyView } from '../features/baby/view.js';
+import { createPetView } from '../features/pet/view.js';
+import { createStaffView } from '../features/staff/view.js';
+import { createUiWorkspace } from '../ui/workspace.js';
+import { createUiDialogs } from '../ui/dialogs.js';
+import { createUiAudience } from '../ui/audience.js';
 import { parseNavigation, navigationUrl } from './navigation.ts';
 import { createDomain } from '../domain/engine.ts';
-import { canonicalKnowledge } from '../content/index.js';
+import {
+  canonicalKnowledge,
+  canonicalExperience,
+  contentForLanguage,
+} from '../content/index.ts';
+import { translate } from '../locales/catalogue.ts';
 import { icons } from '../ui/icons.js';
 (function () {
   'use strict';
 
-  const domain = createDomain(canonicalKnowledge);
+  const domain = createDomain(canonicalKnowledge, canonicalExperience);
   const {
     createState,
     updateHome,
@@ -53,7 +66,6 @@ import { icons } from '../ui/icons.js';
   const staffAnalytics = (filters) => {
     const result = domain.staffAnalytics(filters);
     if (!result) return null;
-    const experience = knowledge.new_home.experience;
     return {
       ...result,
       rows: result.rows.map((row) => ({
@@ -77,42 +89,43 @@ import { icons } from '../ui/icons.js';
 
   let knowledge = canonicalKnowledge;
   let language = 'fi';
-  function text(value) {
-    return language === 'en' &&
-      Object.prototype.hasOwnProperty.call(
-        canonicalKnowledge.new_home.uiEnglish,
-        value,
-      )
-      ? canonicalKnowledge.new_home.uiEnglish[value]
-      : value;
-  }
+  const t = (key) => translate(language, key);
+  let experience = canonicalExperience;
   function setLanguage(value) {
     if (!['fi', 'en'].includes(value)) return false;
     language = value;
-    knowledge =
-      value === 'fi'
-        ? canonicalKnowledge
-        : Object.fromEntries(
-            Object.entries(canonicalKnowledge).map(([id, original]) => {
-              const module = JSON.parse(JSON.stringify(original));
-              Object.entries(original.english).forEach(
-                ([path, translation]) => {
-                  const keys = path.split('.');
-                  const last = keys.pop();
-                  const parent = keys.reduce((node, key) => node[key], module);
-                  parent[last] = translation;
-                },
-              );
-              return [id, module];
-            }),
-          );
+    ({ knowledge, experience } = contentForLanguage(value));
     return true;
   }
   const scenarios = [
-    { id: 'new_home', icon: 'home', label: 'Uusi koti' },
-    { id: 'absence', icon: 'suitcase', label: 'Koti tyhjillään' },
-    { id: 'first_baby', icon: 'baby', label: 'Ensimmäinen lapsi' },
-    { id: 'pet', icon: 'paw', label: 'Lemmikin vointi' },
+    {
+      id: 'new_home',
+      icon: 'home',
+      get label() {
+        return t('scenario.home');
+      },
+    },
+    {
+      id: 'absence',
+      icon: 'suitcase',
+      get label() {
+        return t('scenario.absence');
+      },
+    },
+    {
+      id: 'first_baby',
+      icon: 'baby',
+      get label() {
+        return t('scenario.baby');
+      },
+    },
+    {
+      id: 'pet',
+      icon: 'paw',
+      get label() {
+        return t('scenario.pet');
+      },
+    },
   ];
 
   function displayDate(iso) {
@@ -124,132 +137,9 @@ import { icons } from '../ui/icons.js';
     }).format(new Date(`${iso}T00:00:00Z`));
   }
 
-  function buildAbsenceDraft(state) {
-    const module = knowledge.absence;
-    const context = state.cases.absence;
-    const trip = absenceTrip(state);
-    const tasks = trip
-      ? visibleTasks(state, 'absence').filter(
-          (task) =>
-            task.delegatable &&
-            context.assignedTaskIds.has(task.id) &&
-            !context.completedTaskIds.has(task.id),
-        )
-      : [];
-    if (!trip)
-      return { taskIds: [], text: module.presentation.invalidTripLabel };
-    if (!tasks.length)
-      return {
-        taskIds: [],
-        text: `${module.delegation.emptyText}\n\n${module.presentation.notSent}`,
-      };
-    const intro = module.delegation.introTemplate
-      .replace('{neighborName}', context.neighborName)
-      .replace('{departureDate}', displayDate(trip.departure))
-      .replace('{returnDate}', displayDate(trip.returnDate))
-      .replace('{durationDays}', trip.durationDays);
-    return {
-      taskIds: tasks.map((task) => task.id),
-      text: [
-        intro,
-        '',
-        ...tasks.map((task, index) => `${index + 1}. ${task.delegationText}`),
-        '',
-        module.delegation.closingText,
-        module.presentation.notSent,
-      ].join('\n'),
-    };
-  }
-
   function petAction(state, actionId) {
     const action = petPrimaryAction(state);
     return action?.id === actionId ? action : null;
-  }
-
-  function buildPetPacket(state) {
-    const module = knowledge.pet;
-    const context = state.cases.pet;
-    const duration =
-      module.controls
-        .find((control) => control.id === 'duration')
-        .options.find((option) => option.value === context.duration)?.label ||
-      module.rules.observations.unknownResultLabel;
-    const labels = (entries, ids, fallback) =>
-      entries
-        .filter((entry) => (ids || []).includes(entry.id))
-        .map((entry) => entry.label)
-        .join('; ') || fallback;
-    return [
-      module.persona,
-      audienceCopy(state, 'pet').packetContext,
-      `${module.presentation.symptomsLabel}: ${labels(module.symptoms, context.symptomIds, module.packet.emptySymptomsLabel)}`,
-      `${module.presentation.emergencyLabel}: ${labels(module.emergencySigns, context.emergencySignIds, module.packet.unselectedEmergencyLabel)}`,
-      `${module.presentation.durationLabel}: ${duration}`,
-      ...module.observations.map(
-        (item) =>
-          `${item.label}: ${item.options.find((option) => option.value === context.observations?.[item.id])?.label || module.rules.observations.unknownResultLabel}`,
-      ),
-      module.packet.unknownBackgroundLabel,
-      module.packet.temperatureLabel,
-      '',
-      `${module.presentation.routeLabel}: ${module.insights[petRoute(state)].title}`,
-      module.insights[petRoute(state)].text,
-      '',
-      module.packet.completedTasksLabel,
-      ...module.tasks.map(
-        (task) =>
-          `${context.completedTaskIds.has(task.id) ? '[x]' : '[ ]'} ${task.title}`,
-      ),
-      '',
-      module.presentation.notSent,
-    ].join('\n');
-  }
-
-  function buildBabyPacket(state) {
-    const module = knowledge.first_baby;
-    const condition = module.controls
-      .find((item) => item.id === 'equipmentCondition')
-      .options.find(
-        (option) => option.value === state.cases.first_baby.equipmentCondition,
-      )?.label;
-    return [
-      module.persona,
-      audienceCopy(state, 'first_baby').packetContext,
-      `${module.presentation.conditionLabel}: ${condition}`,
-      '',
-      module.actions[0].text,
-      '',
-      ...applicableTasks(state, 'first_baby').map(
-        (task) =>
-          `${state.cases.first_baby.completedTaskIds.has(task.id) ? '[x]' : '[ ]'} ${task.title}`,
-      ),
-      '',
-      module.actions[0].confirmation,
-    ].join('\n');
-  }
-
-  function buildHomePacket(state) {
-    const module = knowledge.new_home;
-    const home = state.cases.new_home;
-    const controls = module.controls;
-    const action = module.actions[0];
-    const lines = [
-      module.persona,
-      audienceCopy(state, 'new_home').packetContext,
-      `${controls[0].label}: ${home.pipeworkYear === null ? text('Ei tiedossa') : home.pipeworkYear}`,
-      `${controls[1].label}: ${home.surfaceYear}`,
-      '',
-      action.text,
-      '',
-      text('Esimerkkitehtävien tilanne:'),
-    ];
-    module.tasks.forEach((task) =>
-      lines.push(
-        `${home.completedTaskIds.has(task.id) ? '[x]' : '[ ]'} ${task.title}`,
-      ),
-    );
-    lines.push('', action.confirmation);
-    return lines.join('\n');
   }
 
   function audienceCopy(currentState, caseId = currentState.activeCase) {
@@ -266,13 +156,13 @@ import { icons } from '../ui/icons.js';
   }
 
   function policyContext(currentState) {
-    const copy = knowledge.new_home.experience.policyContext;
+    const copy = experience.policyContext;
     if (currentState.audience !== 'customer') return copy.visitor;
     if (currentState.activeCase === 'pet')
       return petServiceAccess(currentState) === 'included'
         ? copy.petIncluded
         : copy.petNotIncluded;
-    const portfolio = knowledge.new_home.experience.portfolios.find(
+    const portfolio = experience.portfolios.find(
       (item) => item.id === currentState.portfolioId,
     );
     if (currentState.activeCase === 'absence')
@@ -288,10 +178,10 @@ import { icons } from '../ui/icons.js';
   }
 
   function buildPolicyQuestions(currentState) {
-    const copy = knowledge.new_home.experience.policyContext;
+    const copy = experience.policyContext;
     const portfolio =
       currentState.audience === 'customer' &&
-      knowledge.new_home.experience.portfolios.find(
+      experience.portfolios.find(
         (item) => item.id === currentState.portfolioId,
       );
     const lines = [
@@ -323,6 +213,180 @@ import { icons } from '../ui/icons.js';
     return lines.join('\n');
   }
 
+  const viewContext = {
+    get absencePriority() {
+      return absencePriority;
+    },
+    get absenceTrip() {
+      return absenceTrip;
+    },
+    get applicableTasks() {
+      return applicableTasks;
+    },
+    get arrangeWorkspace() {
+      return arrangeWorkspace;
+    },
+    get audienceCopy() {
+      return audienceCopy;
+    },
+    get buildBabyPacket() {
+      return buildBabyPacket;
+    },
+    get buildPetPacket() {
+      return buildPetPacket;
+    },
+    get buildPolicyQuestions() {
+      return buildPolicyQuestions;
+    },
+    get calculateHomePrice() {
+      return calculateHomePrice;
+    },
+    get caseHeading() {
+      return caseHeading;
+    },
+    get caseTaskCards() {
+      return caseTaskCards;
+    },
+    get choiceControl() {
+      return choiceControl;
+    },
+    get clipboard() {
+      return clipboard;
+    },
+    get dialog() {
+      return dialog;
+    },
+    get displayDate() {
+      return displayDate;
+    },
+    get escape() {
+      return escape;
+    },
+    get evidence() {
+      return evidence;
+    },
+    get experience() {
+      return experience;
+    },
+    get hasPolicy() {
+      return hasPolicy;
+    },
+    get homeGuidance() {
+      return homeGuidance;
+    },
+    get icon() {
+      return icon;
+    },
+    get infoButton() {
+      return infoButton;
+    },
+    get insightCard() {
+      return insightCard;
+    },
+    get insightDetails() {
+      return insightDetails;
+    },
+    get knowledge() {
+      return knowledge;
+    },
+    get language() {
+      return language;
+    },
+    get money() {
+      return money;
+    },
+    get percent() {
+      return percent;
+    },
+    get petAction() {
+      return petAction;
+    },
+    get petIntroAvailable() {
+      return petIntroAvailable;
+    },
+    get petPrimaryAction() {
+      return petPrimaryAction;
+    },
+    get petRoute() {
+      return petRoute;
+    },
+    get petServiceAccess() {
+      return petServiceAccess;
+    },
+    get policyContext() {
+      return policyContext;
+    },
+    get priorityLabels() {
+      return priorityLabels;
+    },
+    get progressCard() {
+      return progressCard;
+    },
+    get readiness() {
+      return readiness;
+    },
+    get scenarios() {
+      return scenarios;
+    },
+    get staffAnalytics() {
+      return staffAnalytics;
+    },
+    get state() {
+      return state;
+    },
+    get t() {
+      return t;
+    },
+    get topicInsight() {
+      return topicInsight;
+    },
+    get updateCaseProgress() {
+      return updateCaseProgress;
+    },
+    get visibleBenefits() {
+      return visibleBenefits;
+    },
+    get visibleTasks() {
+      return visibleTasks;
+    },
+    get workspace() {
+      return workspace;
+    },
+  };
+  const {
+    updatePricingView,
+    renderHome,
+    updateHomeView,
+    updateProgress,
+    buildHomePacket,
+    openHelp,
+  } = createHomeView(viewContext);
+  const { renderAbsence, updateAbsenceView, copyAbsence } =
+    createAbsenceView(viewContext);
+  const { buildBabyPacket, renderBaby, updateBabyView } =
+    createBabyView(viewContext);
+  const { buildPetPacket, renderPet, updatePetView, syncPetGuidanceFeedback } =
+    createPetView(viewContext);
+  const { renderPersonnel } = createStaffView(viewContext);
+  const {
+    caseHeading,
+    choiceControl,
+    insightCard,
+    progressCard,
+    updateCaseProgress,
+    caseTaskCards,
+    topicInsight,
+    insightDetails,
+  } = createUiWorkspace(viewContext);
+  const { infoButton, openInfo, openScenarioAction, openPolicyQuestions } =
+    createUiDialogs(viewContext);
+  const {
+    renderAudienceContext,
+    updatePolicyContext,
+    renderAudienceNav,
+    updateLanguageShell,
+  } = createUiAudience(viewContext);
+
   const workspace = document.getElementById('workspace');
   const initialNavigation = parseNavigation(new URL(location.href));
   const audienceStates = {
@@ -347,7 +411,7 @@ import { icons } from '../ui/icons.js';
     const next = parseNavigation(new URL(location.href));
     if (dialog?.open) dialog.close();
     setLanguage(next.language);
-    draftRevision++;
+    clipboard.revision++;
     if (document.body.dataset.page === 'personnel') {
       renderPersonnel();
       updateLanguageShell();
@@ -366,8 +430,10 @@ import { icons } from '../ui/icons.js';
   const nav = document.getElementById('scenario-nav');
   const dialog = document.getElementById('help-dialog');
   let layoutObserver;
+  let layoutFrame = 0;
   function arrangeWorkspace() {
     layoutObserver?.disconnect();
+    cancelAnimationFrame(layoutFrame);
     const grid = workspace.querySelector('.adaptive-workspace');
     if (!grid) return;
     const cards = [...grid.querySelectorAll('.card')];
@@ -380,29 +446,45 @@ import { icons } from '../ui/icons.js';
       const style = getComputedStyle(grid);
       const gap = parseFloat(style.rowGap);
       const row = parseFloat(style.gridAutoRows);
-      card.style.gridRowEnd = `span ${Math.ceil((card.getBoundingClientRect().height + gap) / (row + gap))}`;
+      const span = `span ${Math.ceil((card.getBoundingClientRect().height + gap) / (row + gap))}`;
+      if (card.style.gridRowEnd !== span) card.style.gridRowEnd = span;
     };
-    layoutObserver = new ResizeObserver((entries) =>
-      entries.forEach((entry) => fit(entry.target)),
-    );
+    layoutObserver = new ResizeObserver(() => {
+      cancelAnimationFrame(layoutFrame);
+      layoutFrame = requestAnimationFrame(() => cards.forEach(fit));
+    });
     cards.forEach((card) => {
       fit(card);
       layoutObserver.observe(card);
     });
   }
   const statusLabels = {
-    verified: 'Lähteestä tarkistettu',
-    illustrative: 'Havainnollistava demo',
-    unverified: 'Ei vahvistettu',
+    get verified() {
+      return t('evidence.verified');
+    },
+    get illustrative() {
+      return t('evidence.illustrative');
+    },
+    get unverified() {
+      return t('evidence.unverified');
+    },
   };
   const priorityLabels = {
-    critical: 'Kriittinen huomio',
-    high: 'Korkea prioriteetti',
-    medium: 'Huomioi',
-    recommendation: 'Suositus',
+    get critical() {
+      return t('priority.critical');
+    },
+    get high() {
+      return t('priority.high');
+    },
+    get medium() {
+      return t('priority.medium');
+    },
+    get recommendation() {
+      return t('priority.recommendation');
+    },
   };
   const escape = (value) =>
-    String(text(value)).replace(
+    String(value).replace(
       /[&<>"']/g,
       (char) =>
         ({
@@ -425,11 +507,11 @@ import { icons } from '../ui/icons.js';
       maximumFractionDigits: 2,
     }).format(bps / 100);
 
-  function evidence(item, module, summaryLabel = 'Lähteet ja rajoitukset') {
+  function evidence(item, module, summaryLabel = t('evidence.summary')) {
     const sources = item.sourceIds.map((id) =>
       module.sources.find((source) => source.id === id),
     );
-    return `<details class="evidence"><summary>${escape(summaryLabel)} <span class="evidence-status">${escape(statusLabels[item.status])}</span></summary><div class="evidence-content">${item.sourceScope ? `<p>${escape(item.sourceScope)}</p>` : ''}<p>${escape(item.limitation)}</p><ul class="source-list">${sources.map((source) => `<li><a lang="fi" href="${escape(source.url)}" target="_blank" rel="noopener noreferrer">${escape(source.publisher)} · ${escape(source.title)}</a><span lang="fi">${escape(source.version)} · ${escape(source.locator)}</span><span>${text('Tarkistettu')} ${escape(source.checkedAt)}${source.effectiveFrom ? ` · ${text('Voimassa')} ${escape(source.effectiveFrom)} ${text('alkaen')}` : ''}</span><span>${escape(statusLabels[source.status])} · ${escape(source.limitation)}</span></li>`).join('')}</ul></div></details>`;
+    return `<details class="evidence"><summary>${escape(summaryLabel)} <span class="evidence-status">${escape(statusLabels[item.status])}</span></summary><div class="evidence-content">${item.sourceScope ? `<p>${escape(item.sourceScope)}</p>` : ''}<p>${escape(item.limitation)}</p><ul class="source-list">${sources.map((source) => `<li><a lang="fi" href="${escape(source.url)}" target="_blank" rel="noopener noreferrer">${escape(source.publisher)} · ${escape(source.title)}</a><span lang="fi">${escape(source.version)} · ${escape(source.locator)}</span><span>${t('evidence.checked')} ${escape(source.checkedAt)}${source.effectiveFrom ? ` · ${t('evidence.effective')} ${escape(source.effectiveFrom)} ${t('evidence.onwards')}` : ''}</span><span>${escape(statusLabels[source.status])} · ${escape(source.limitation)}</span></li>`).join('')}</ul></div></details>`;
   }
 
   function renderNav() {
@@ -438,533 +520,12 @@ import { icons } from '../ui/icons.js';
         const ready = readiness(state, scenario.id);
         const module = knowledge[scenario.id];
         const label = module.presentation?.navTitle || scenario.label;
-        return `<button class="scenario-button" type="button" data-case="${scenario.id}" aria-current="${state.activeCase === scenario.id}"><span class="scenario-icon">${icon(scenario.icon)}</span><span><span class="scenario-name">${escape(label)}</span><span class="scenario-meta" id="nav-progress-${scenario.id}">${ready.completed}/${ready.total} ${text('tehty')}${scenario.id === 'new_home' ? ` · ${text('Ikävähennykset')}` : ''}</span></span></button>`;
+        return `<button class="scenario-button" type="button" data-case="${scenario.id}" aria-current="${state.activeCase === scenario.id}"><span class="scenario-icon">${icon(scenario.icon)}</span><span><span class="scenario-name">${escape(label)}</span><span class="scenario-meta" id="nav-progress-${scenario.id}">${ready.completed}/${ready.total} ${t('tasks.done')}${scenario.id === 'new_home' ? ` · ${t('home.ageDeductions')}` : ''}</span></span></button>`;
       })
       .join('');
   }
 
-  function infoButton(topic, module, label) {
-    return `<button type="button" class="info-button" data-info="${topic}" data-info-case="${scenarios.find((item) => knowledge[item.id] === module)?.id || 'new_home'}" aria-label="${escape(label)}" title="${escape(label)}"><span aria-hidden="true">i</span></button>`;
-  }
-
-  function openInfo(topic, caseId) {
-    const module = knowledge[caseId];
-    if (!module) return;
-    const copy = knowledge.new_home.experience.info;
-    let title, content;
-    if (topic === 'business') {
-      const item = module.business;
-      title = copy.businessLabel;
-      content = `<p>${escape(item.text)}</p><h3>${escape(copy.metricsLabel)}</h3><ul>${item.proposedMetrics.map((metric) => `<li>${escape(metric)}</li>`).join('')}</ul><p class="fine-print">${escape(item.limitation)}</p>${evidence(item, module)}`;
-    } else if (topic === 'pricing') {
-      title = copy.pricingLabel;
-      content = `<p>${escape(knowledge.new_home.preventionIncentive.copy.assumptionsText)}</p>${evidence(knowledge.new_home.preventionIncentive, knowledge.new_home)}`;
-    } else if (topic === 'deduction') {
-      title = copy.deductionLabel;
-      content = `<p>${escape(knowledge.new_home.presentation.calculationScope)}</p><ul>${knowledge.new_home.rules.leakageDeduction.bands.map((band) => `<li>${band.minAge}–${band.maxAge === null ? '∞' : band.maxAge} ${text('v')}: ${band.deductionPercent} %</li>`).join('')}</ul>${evidence(knowledge.new_home.insights.deduction, knowledge.new_home)}${evidence(knowledge.new_home.insights.scope, knowledge.new_home)}${evidence(knowledge.new_home.rules.pipeRepair, knowledge.new_home)}${evidence(knowledge.new_home.rules.technicalLifespan, knowledge.new_home)}`;
-    } else if (topic === 'policy') {
-      title = copy.policyTitle;
-      content = `<p>${escape(copy.policyText)}</p><p class="fine-print">${escape(copy.policyLimits)}</p>${evidence(knowledge.new_home.preventionIncentive, knowledge.new_home)}`;
-    } else return;
-    document.getElementById('dialog-content').innerHTML =
-      `<h2 id="dialog-title">${escape(title)}</h2><p class="confirmation" id="dialog-confirmation">${escape(copy.notice)}</p>${content}`;
-    dialog.dataset.case = caseId === 'pet' ? 'pet-info' : 'info';
-    dialog.dataset.route = caseId === 'pet' ? petRoute(state) : '';
-    dialog.showModal();
-  }
-
-  function pricingCard(module) {
-    const config = module.preventionIncentive;
-    const audience = audienceCopy(state, 'new_home');
-    const copy = {
-      ...config.copy,
-      title: audience.priceTitle,
-      intro: audience.priceIntro,
-    };
-    return `<section class="card pricing-card" aria-labelledby="pricing-heading" aria-describedby="pricing-concept pricing-limitation">
-      <p class="eyebrow" id="pricing-concept">${escape(copy.conceptLabel)}</p>
-      <div class="section-title"><h3 id="pricing-heading" tabindex="-1">${escape(copy.title)}</h3>${infoButton('pricing', module, knowledge.new_home.experience.info.pricingLabel)}</div><p class="pricing-intro">${escape(copy.intro)}</p>
-      <div id="pricing-result"><p class="small-label" id="annual-price-label">${escape(copy.projectedLabel)}</p><div class="annual-price"><output id="annual-price" aria-labelledby="annual-price-label"></output><span>${escape(copy.perYear)}</span></div>
-        <div class="pricing-saving"><span>${escape(copy.savingLabel)}</span><strong><span id="prevention-saving"></span> ${escape(copy.perYear)}</strong></div>
-
-        <p class="fine-print pricing-count">${escape(copy.eligibleCountLabel)} <strong id="pricing-eligible-count"></strong> · ${escape(copy.capLabel)} <strong id="pricing-cap"></strong></p>
-      </div><p class="limitation" id="pricing-unavailable" hidden>${escape(copy.unavailableLabel)}</p>
-      <p class="sr-only" role="status" id="pricing-announcement" aria-live="polite"></p>
-      <p class="pricing-verification">${escape(copy.verificationNotice)}</p><p class="fine-print" id="pricing-limitation">${escape(config.limitation)}</p>
-      <details class="pricing-assumptions"><summary>${escape(copy.assumptionsLabel)}</summary><dl class="pricing-breakdown"><div><dt>${escape(copy.baseLabel)}</dt><dd id="base-annual-price"></dd></div><div><dt>${escape(copy.bundleLabel)} <span id="bundle-rate"></span></dt><dd id="bundle-saving"></dd></div><div class="pricing-subtotal"><dt>${escape(copy.afterBundleLabel)}</dt><dd id="after-bundle-price"></dd></div><div><dt>${escape(copy.preventionLabel)} <span id="prevention-rate"></span></dt><dd id="prevention-discount"></dd></div></dl><p class="fine-print">${escape(copy.assumptionsText)}</p><ul class="pricing-actions">${config.eligibleActions
-        .filter((action) => action.policyId === config.policyId)
-        .map(
-          (action) =>
-            `<li><span>${escape(module.tasks.find((task) => task.id === action.taskId).title)}<span class="small-label" data-pricing-status="${escape(action.taskId)}"></span></span><strong>${escape(copy.taskBenefitTemplate.replace('{percent}', percent(action.discountBps)))}</strong></li>`,
-        )
-        .join(
-          '',
-        )}</ul><p class="fine-print">${escape(copy.preparationNotice)}</p><p class="fine-print">${escape(copy.verificationPlan)}</p></details>
-      ${evidence(config, module, copy.evidenceLabel)}<p class="fine-print pricing-separation">${escape(copy.deductionNotice)}</p>
-    </section>`;
-  }
-
-  function pricingFeedback(module) {
-    const copy = module.preventionIncentive.copy;
-    return `<div class="pricing-feedback" id="pricing-feedback" hidden><div><span class="small-label">${escape(copy.feedbackLabel)}</span><strong id="pricing-feedback-price"></strong><span class="fine-print" id="pricing-feedback-saving"></span></div><button type="button" class="primary-button" data-show-pricing>${escape(copy.showCalculationLabel)} ${icon('arrow')}</button></div>`;
-  }
-
-  function updatePricingView(showFeedback = false) {
-    const config = knowledge.new_home.preventionIncentive;
-    const completed = state.cases.new_home.completedTaskIds;
-    const result = calculateHomePrice(state);
-    document.getElementById('pricing-feedback').hidden =
-      !showFeedback || !result;
-    document.body.classList.toggle(
-      'pricing-feedback-visible',
-      showFeedback && !!result,
-    );
-    const policyPrice = document.getElementById('policy-price');
-    if (policyPrice)
-      policyPrice.textContent = result
-        ? `${money(result.projectedAnnualCents)} ${config.copy.perYear}`
-        : config.copy.unavailableLabel;
-    document.getElementById('pricing-result').hidden = !result;
-    document.getElementById('pricing-unavailable').hidden = !!result;
-    document.querySelectorAll('[data-pricing-status]').forEach((element) => {
-      element.textContent = completed.has(element.dataset.pricingStatus)
-        ? config.copy.completedLabel
-        : config.copy.incompleteLabel;
-    });
-    if (!result) {
-      document.getElementById('pricing-announcement').textContent =
-        config.copy.unavailableLabel;
-      return;
-    }
-    const values = {
-      'annual-price': money(result.projectedAnnualCents),
-      'prevention-saving': money(result.preventionSavingCents),
-      'base-annual-price': money(result.baseAnnualCents),
-      'bundle-rate': `${percent(result.bundleDiscountBps)} %`,
-      'bundle-saving': `−${money(result.bundleSavingCents)}`,
-      'after-bundle-price': money(result.afterBundleCents),
-      'prevention-rate': `${percent(result.preventionDiscountBps)} %`,
-      'prevention-discount': `−${money(result.preventionSavingCents)}`,
-      'pricing-eligible-count': `${result.completedActionCount}/${result.eligibleActionCount}`,
-      'pricing-cap': `${percent(result.preventionCapBps)} %`,
-    };
-    Object.entries(values).forEach(([id, value]) => {
-      document.getElementById(id).textContent = value;
-    });
-    document.getElementById('pricing-feedback-price').textContent =
-      `${values['annual-price']} ${config.copy.perYear}`;
-    document.getElementById('pricing-feedback-saving').textContent =
-      config.copy.feedbackSavingTemplate.replace(
-        '{saving}',
-        values['prevention-saving'],
-      );
-    document.getElementById('pricing-announcement').textContent =
-      config.copy.announcementTemplate
-        .replace('{price}', values['annual-price'])
-        .replace('{saving}', values['prevention-saving']);
-  }
-
-  function publishedBenefitsCard(module) {
-    const benefits = module.publishedBenefits;
-    return `<section class="card reference-benefits" aria-labelledby="benefits-heading"><h3 id="benefits-heading">${escape(benefits.title)}</h3><p class="fine-print">${escape(benefits.notice)}</p>${visibleBenefits(
-      state,
-    )
-      .map(
-        (item) =>
-          `<details class="reference-benefit" data-benefit="${escape(item.id)}"><summary>${escape(item.title)}</summary><p>${escape(item.text)}</p><p class="fine-print">${escape(item.limitation)}</p>${evidence(item, module)}</details>`,
-      )
-      .join('')}</section>`;
-  }
-
-  function claimsGuidanceCard(module) {
-    const guide = module.claimsGuidance;
-    return `<section class="card claims-guidance" aria-labelledby="claims-guidance-heading"><h3 id="claims-guidance-heading">${escape(guide.title)}</h3><p class="limitation" id="claim-success-evidence">${escape(guide.successNotice)}</p><p class="fine-print">${escape(guide.limitation)}</p>${guide.items.map((item) => `<details class="reference-benefit"><summary>${escape(item.title)}</summary><p>${escape(item.text)}</p>${evidence(item, module)}</details>`).join('')}</section>`;
-  }
-
-  function renderTasks(module, taskIds = module.tasks.map((task) => task.id)) {
-    const home = state.cases.new_home;
-    return taskIds
-      .map((id) => module.tasks.find((task) => task.id === id))
-      .filter(Boolean)
-      .map((task) => {
-        if (task.id === 'professional-review')
-          return homePipeTask(module, task);
-        const completed = home.completedTaskIds.has(task.id);
-        const action = module.actions.find((item) => item.id === task.actionId);
-        const incentive = module.preventionIncentive;
-        const benefit = incentive.eligibleActions.find(
-          (item) =>
-            item.taskId === task.id && item.policyId === incentive.policyId,
-        );
-        const benefitLabel = benefit
-          ? incentive.copy.taskBenefitTemplate.replace(
-              '{percent}',
-              percent(benefit.discountBps),
-            )
-          : incentive.copy.preparationLabel;
-        return `<article class="task inline-task" id="task-${task.id}" data-complete="${completed}"><label class="task-toggle"><input type="checkbox" data-task="${task.id}" ${completed ? 'checked' : ''}><span>${escape(task.title)}</span></label><div class="task-body"><p class="task-why">${escape(task.why)}</p><div class="task-meta"><span class="badge ${task.priority === 'high' ? 'priority-high' : ''}">${escape(priorityLabels[task.priority])}</span><span class="badge ${benefit ? 'incentive-badge' : ''}">${escape(benefitLabel)}</span><span class="complete-label" ${completed ? '' : 'hidden'}>${text('Merkitty tehdyksi')}</span></div>${evidence(task, module)}${action ? `<button type="button" class="primary-button" data-action="${action.id}">${escape(action.label)} ${icon('arrow')}</button>` : ''}</div></article>`;
-      })
-      .join('');
-  }
-
-  function homePipeTask(module, task) {
-    const home = state.cases.new_home;
-    const [pipeControl, surfaceControl] = module.controls;
-    const complete = home.completedTaskIds.has(task.id);
-    return `<article class="task inline-task pipe-task" id="task-${task.id}" data-complete="${complete}"><label class="task-toggle"><input type="checkbox" data-task="${task.id}" ${complete ? 'checked' : ''}><span>${escape(module.presentation.pipeTaskTitle)}</span></label><div class="task-body"><p class="task-why">${escape(module.presentation.pipeTaskHelp)}</p>
-      <div class="field"><label for="pipework-year">${escape(pipeControl.label)}</label><div class="range-value"><output class="year-value" id="pipework-value" for="pipework-year"></output><span id="pipework-age"></span></div><input type="range" id="pipework-year" min="${pipeControl.min}" max="${pipeControl.max}" step="${pipeControl.step}" value="${home.lastKnownPipeworkYear}" aria-describedby="pipework-help"><p id="pipework-help" class="field-help">${escape(pipeControl.help)}</p><label class="unknown-year"><input type="checkbox" id="unknown-pipework-year" ${home.pipeworkYear === null ? 'checked' : ''}>${escape(module.presentation.unknownYearLabel)}</label></div>
-      <div class="inline-result" role="status"><div><span>${escape(module.presentation.resultLabel)}</span><output id="deduction-percent" aria-label="${text('Vuotovähennys')}"></output><p class="fine-print" id="deduction-context"></p></div>${infoButton('deduction', module, knowledge.new_home.experience.info.deductionLabel)}</div>
-      <fieldset class="field" aria-describedby="surface-help"><legend>${escape(surfaceControl.label)}</legend><div class="segmented">${surfaceControl.options.map((option) => `<label><input type="radio" name="surface-year" value="${option.value}" ${option.value === home.surfaceYear ? 'checked' : ''}><span>${escape(option.label)}</span></label>`).join('')}</div><p id="surface-help" class="field-help">${escape(surfaceControl.help)}</p><p id="surface-text" class="task-why"></p></fieldset>
-      <div class="task-meta"><span class="badge">${escape(module.preventionIncentive.copy.preparationLabel)}</span><span class="complete-label" ${complete ? '' : 'hidden'}>${text('Merkitty tehdyksi')}</span></div>${evidence(task, module)}<button type="button" class="primary-button" data-action="plumbing-help">${escape(module.actions[0].label)} ${icon('arrow')}</button></div></article>`;
-  }
-
-  function renderHome() {
-    const module = knowledge.new_home;
-    workspace.innerHTML = `${caseHeading(module)}<div class="workspace-grid home-workspace"><div class="stack"><section class="card home-summary" aria-labelledby="context-heading"><p class="small-label">${escape(module.presentation.homeLabel)}</p><h3 id="context-heading">${escape(audienceCopy(state).contextTitle)}</h3><p class="next-task-title" id="home-next-title"></p><p class="insight-text" id="home-next-reason" role="status"></p><p class="fine-print" id="home-surface-summary"></p><button class="secondary-button" type="button" id="home-next-button" data-show-home-task>${escape(module.presentation.nextActionLabel)} ${icon('arrow')}</button><section class="progress-card context-progress" aria-labelledby="progress-heading"><div class="progress-header"><h3 id="progress-heading">${escape(audienceCopy(state).tasksTitle || module.presentation.tasksTitle)}</h3><output id="progress-count" aria-live="polite"></output></div><progress id="home-progress" aria-labelledby="progress-heading"></progress><p class="fine-print">${escape(module.presentation.progressNotice)}</p></section></section>${pricingCard(module)}</div>
-      <section class="card home-task-card" aria-labelledby="tasks-heading"><h3 id="tasks-heading">${escape(audienceCopy(state).tasksTitle || module.presentation.tasksTitle)}</h3><p class="fine-print">${escape(module.presentation.prioritiesNotice)}</p><div class="topic-tasks">${renderTasks(module, ['professional-review', 'main-valve', 'kitchen-leaks', 'floor-drain'])}</div></section></div><div class="support-grid">${publishedBenefitsCard(module)}${state.audience === 'customer' ? claimsGuidanceCard(module) : ''}</div>${pricingFeedback(module)}`;
-    updateHomeView();
-    updateProgress();
-    updatePricingView();
-  }
-
-  function updateHomeView() {
-    const home = state.cases.new_home;
-    const module = knowledge.new_home;
-    const { result, nextTask } = homeGuidance(state);
-    document.getElementById('pipework-value').textContent = result
-      ? home.pipeworkYear
-      : text('Ei tiedossa');
-    document.getElementById('pipework-year').disabled =
-      home.pipeworkYear === null;
-    document.getElementById('pipework-age').textContent = result
-      ? `${result.age} ${text('vuotta vuonna')} ${module.referenceYear}`
-      : `${text('Vertailuvuosi')} ${module.referenceYear}`;
-    document.getElementById('deduction-percent').textContent = result
-      ? `${result.deductionPercent} %`
-      : '—';
-    document.getElementById('deduction-context').textContent = result
-      ? module.insights.deduction.limitation
-      : module.insights.deduction.unknownLabel;
-    document.getElementById('surface-text').textContent =
-      home.surfaceYear === module.defaults.surfaceYear
-        ? module.insights.surface.originalText
-        : module.insights.surface.renovatedText;
-    document.getElementById('home-next-title').textContent = nextTask
-      ? nextTask.id === 'professional-review'
-        ? module.presentation.pipeTaskTitle
-        : nextTask.title
-      : module.presentation.allDoneTitle;
-    document.getElementById('home-next-reason').textContent = !nextTask
-      ? module.presentation.allDoneText
-      : !result
-        ? module.presentation.missingYearText
-        : (result.deductionPercent
-            ? module.presentation.deductionText
-            : module.presentation.zeroDeductionText
-          )
-            .replace('{year}', home.pipeworkYear)
-            .replace('{percent}', result.deductionPercent);
-    document.getElementById('home-surface-summary').textContent =
-      module.presentation.surfaceSummary.replace('{year}', home.surfaceYear);
-    const button = document.getElementById('home-next-button');
-    button.hidden = !nextTask;
-    button.dataset.taskTarget = nextTask?.id || '';
-  }
-
-  function updateProgress() {
-    const ready = readiness(state, 'new_home');
-    document.getElementById('progress-count').textContent =
-      `${ready.completed}/${ready.total} ${text('tehty')}`;
-    const progress = document.getElementById('home-progress');
-    progress.max = ready.total;
-    progress.value = ready.completed;
-    document.getElementById('nav-progress-new_home').textContent =
-      `${ready.completed}/${ready.total} ${text('tehty')} · ${text('Ikävähennykset')}`;
-  }
-
-  let draftRevision = 0;
-
-  function caseHeading(module) {
-    return `<div class="workspace-heading"><div class="workspace-title"><h2 id="scenario-title">${escape(module.title)}</h2><p class="case-intro" data-audience-copy="${state.audience}">${escape(audienceCopy(state).caseIntro)}</p></div><div class="heading-tools"><span class="small-label">${text('Kuvitteellinen esimerkkitilanne')} · ${module.referenceYear}</span>${infoButton('business', module, knowledge.new_home.experience.info.businessLabel)}</div></div>`;
-  }
-
-  function choiceControl(caseId, control) {
-    return `<fieldset class="field" aria-describedby="help-${control.id}"><legend>${escape(control.label)}</legend><div class="segmented flexible-options">${control.options.map((option) => `<label><input type="radio" name="${caseId}-${control.id}" data-field="${control.id}" value="${escape(option.value)}" ${state.cases[caseId][control.id] === option.value ? 'checked' : ''}><span>${escape(option.label)}</span></label>`).join('')}</div><p class="field-help" id="help-${control.id}">${escape(control.help)}</p></fieldset>`;
-  }
-
-  function insightCard(item, module, extraClass = '') {
-    return `<section class="card ${extraClass}"><h3>${escape(item.title || item.label)}</h3>${item.text ? `<p class="insight-text">${escape(item.text)}</p>` : ''}<p class="fine-print">${escape(item.limitation)}</p>${evidence(item, module)}</section>`;
-  }
-
-  function progressCard(module) {
-    return `<section class="progress-card context-progress" aria-labelledby="case-progress-heading"><div class="progress-header"><h3 id="case-progress-heading">${escape(audienceCopy(state).progressTitle || module.presentation.progressTitle)}</h3><output id="case-progress-count" aria-live="polite"></output></div><progress id="case-progress" aria-labelledby="case-progress-heading"></progress><p class="fine-print">${escape(module.presentation.progressNotice)}</p></section>`;
-  }
-
-  function updateCaseProgress() {
-    const ready = readiness(state, state.activeCase);
-    document.getElementById('case-progress-count').textContent =
-      `${ready.completed}/${ready.total} ${text('tehty')}`;
-    const progress = document.getElementById('case-progress');
-    progress.max = ready.total || 1;
-    progress.value = ready.completed;
-    document.getElementById(`nav-progress-${state.activeCase}`).textContent =
-      `${ready.completed}/${ready.total} ${text('tehty')}`;
-  }
-
-  function caseTaskCards(caseId, taskIds = null) {
-    const module = knowledge[caseId];
-    return (
-      visibleTasks(state, caseId)
-        .filter((task) => !taskIds || taskIds.includes(task.id))
-        .map((task) => {
-          const complete = state.cases[caseId].completedTaskIds.has(task.id);
-          const priority =
-            caseId === 'absence' ? absencePriority(state, task) : task.priority;
-          const assignment =
-            caseId === 'absence' && task.delegatable
-              ? `<label class="assignment"><input type="checkbox" data-assign="${task.id}" ${state.cases.absence.assignedTaskIds.has(task.id) ? 'checked' : ''} ${complete ? 'disabled' : ''}>${escape(module.presentation.assignLabel)}</label>`
-              : '';
-          return `<article class="task inline-task" data-complete="${complete}"><label class="task-toggle"><input type="checkbox" data-task="${task.id}" ${complete ? 'checked' : ''}><span>${escape(task.title)}</span></label><div class="task-body"><p class="task-why">${escape(task.why)}</p><div class="task-meta"><span class="badge priority-${priority}" data-priority="${task.id}">${escape(priorityLabels[priority])}</span><span class="complete-label" ${complete ? '' : 'hidden'}>${text('Merkitty tehdyksi')}</span></div>${assignment}${caseId === 'pet' ? `<p class="fine-print">${escape(task.limitation)}</p>` : ''}${evidence(task, module)}</div></article>`;
-        })
-        .join('') ||
-      `<p class="fine-print">${escape(module.presentation.emptyTasksLabel || '')}</p>`
-    );
-  }
-
-  function topicInsight(item, module) {
-    return `<div class="topic-insight">${item.text ? `<p class="insight-text">${escape(item.text)}</p>` : ''}<p class="fine-print">${escape(item.limitation)}</p>${evidence(item, module)}</div>`;
-  }
-
-  function insightDetails(item, module) {
-    return `<details class="topic-details"><summary>${escape(item.title || item.label)}</summary>${topicInsight(item, module)}</details>`;
-  }
-
-  function absenceTopics() {
-    const module = knowledge.absence;
-    return `<section class="card topic-card" aria-labelledby="water-heading"><h3 id="water-heading">${escape(module.presentation.waterTitle)}</h3><div class="topic-tasks">${caseTaskCards('absence', ['water-plan', 'appliance-taps'])}</div><p class="limitation">${escape(module.insights.water.limitation)}</p><div id="absence-water">${insightDetails(module.insights.water, module)}</div></section>
-      <section class="card topic-card" id="absence-winter" aria-labelledby="heating-heading"><h3 id="heating-heading">${escape(module.presentation.heatingTitle)}</h3><div class="topic-tasks">${caseTaskCards('absence', ['heating'])}</div>${topicInsight(module.insights.winter, module)}</section>
-      <section class="card topic-card" aria-labelledby="departure-heading"><h3 id="departure-heading">${escape(module.presentation.departureTitle)}</h3><div class="topic-tasks">${caseTaskCards('absence', ['caretaker', 'locks', 'mailbox', 'travel-documents'])}</div>${evidence(module.insights.preparation, module)}${evidence(module.rules.priorityEscalation, module)}</section>`;
-  }
-
-  function renderAbsence() {
-    const module = knowledge.absence;
-    const range = module.controls.find(
-      (control) => control.id === 'durationDays',
-    );
-    const action = module.actions[0];
-    workspace.innerHTML = `${caseHeading(module)}<div class="workspace-grid adaptive-workspace"><div class="stack"><section class="card" aria-labelledby="context-heading"><div class="card-heading"><h3 id="context-heading">${escape(audienceCopy(state).contextTitle)}</h3><span class="badge">${text('Esitäytetty profiili')}</span></div><p class="persona" id="absence-persona"></p><p class="trip-dates" id="absence-dates"></p>${choiceControl('absence', module.controls[0])}<div class="field"><label for="absence-duration">${escape(range.label)}</label><div class="range-value"><output class="year-value" id="absence-duration-value" for="absence-duration"></output><span>${text('vrk')}</span></div><input id="absence-duration" data-field="durationDays" type="range" min="${range.min}" max="${range.max}" step="${range.step}" value="${state.cases.absence.durationDays}" aria-describedby="help-duration"><div class="range-ends" aria-hidden="true"><span>${range.min} ${text('vrk')}</span><span>${range.max} ${text('vrk')}</span></div><p class="field-help" id="help-duration">${escape(range.help)}</p></div><p class="fine-print">${escape(module.demoNotice)}</p>${progressCard(module)}<p id="absence-preparation" class="fine-print" role="status"></p><p class="fine-print">${escape(module.presentation.priorityNotice)}</p></section></div>
-      <div class="stack"><div id="case-tasks" class="stack">${absenceTopics()}</div>
-      <section class="card draft-card" aria-labelledby="draft-heading"><h3 id="draft-heading">${escape(module.delegation.title)}</h3><p class="fine-print">${escape(module.presentation.notSent)}</p><label class="packet-label" for="absence-message">${escape(module.presentation.manualCopyLabel)}</label><textarea id="absence-message" rows="7" readonly></textarea><div class="draft-actions"><button type="button" class="primary-button" id="copy-absence">${escape(action.label)} ${icon('book')}</button><p id="copy-status" class="fine-print" role="status"></p></div>${evidence(module.delegation, module)}${evidence(action, module)}</section>
-      <section class="card supporting-notes">${insightDetails(module.insights.consequences, module)}<details class="topic-details"><summary>${escape(module.presentation.scopeLabel)}</summary>${evidence(module.rules.buildingMonitoring, module)}${evidence(module.rules.insufficientBaseHeat, module)}</details></section></div></div>`;
-    updateAbsenceView();
-  }
-
-  function updateAbsenceView(tasksChanged = false) {
-    const module = knowledge.absence;
-    const context = state.cases.absence;
-    const trip = absenceTrip(state);
-    document.getElementById('absence-duration-value').textContent =
-      context.durationDays;
-    document.getElementById('absence-persona').textContent =
-      module.presentation.tripTemplate
-        .replace('{season}', module.presentation.tripLabels[context.season])
-        .replace('{durationDays}', context.durationDays);
-    document.getElementById('absence-dates').textContent = trip
-      ? `${displayDate(trip.departure)} – ${displayDate(trip.returnDate)}`
-      : module.presentation.invalidTripLabel;
-    if (tasksChanged)
-      document.getElementById('case-tasks').innerHTML = absenceTopics();
-    document.getElementById('absence-winter').hidden =
-      context.season !== 'winter';
-    document.getElementById('absence-water').hidden =
-      !trip ||
-      context.durationDays <=
-        module.rules.extendedAbsence.durationDaysGreaterThan;
-    document.querySelectorAll('[data-priority]').forEach((element) => {
-      const task = module.tasks.find(
-        (item) => item.id === element.dataset.priority,
-      );
-      const priority = absencePriority(state, task);
-      element.textContent = text(priorityLabels[priority]);
-      element.className = `badge priority-${priority}`;
-    });
-    const ready = readiness(state, 'absence');
-    document.getElementById('absence-preparation').textContent =
-      ready.completed === ready.total
-        ? module.insights.preparation.completedLabel
-        : module.insights.preparation.pendingLabel;
-    const draft = buildAbsenceDraft(state);
-    document.getElementById('absence-message').value = draft.text;
-    document.getElementById('copy-absence').disabled = !draft.taskIds.length;
-    document.getElementById('copy-status').textContent = draft.taskIds.length
-      ? ''
-      : module.actions[0].emptyLabel;
-    draftRevision++;
-    updateCaseProgress();
-    if (tasksChanged) arrangeWorkspace();
-  }
-
-  async function copyAbsence() {
-    const draft = buildAbsenceDraft(state);
-    if (!draft.taskIds.length) return;
-    const revision = draftRevision;
-    let copied = false;
-    try {
-      await navigator.clipboard.writeText(draft.text);
-      copied = true;
-    } catch {
-      /* Selectable text remains available. */
-    }
-    if (state.activeCase !== 'absence' || revision !== draftRevision) return;
-    const action = knowledge.absence.actions[0];
-    document.getElementById('copy-status').textContent = copied
-      ? action.confirmation
-      : `${action.fallbackLabel} ${knowledge.absence.presentation.notSent}`;
-    if (!copied) {
-      const textarea = document.getElementById('absence-message');
-      textarea.focus();
-      textarea.select();
-    }
-  }
-
-  function babyTopics() {
-    const module = knowledge.first_baby;
-    const context = state.cases.first_baby;
-    const categories =
-      context.category === 'all'
-        ? ['car', 'sleep', 'home']
-        : [context.category];
-    return categories
-      .map((category) => {
-        const tasks = visibleTasks(state, 'first_baby')
-          .filter((task) => task.category === category)
-          .map((task) => task.id);
-        const notes =
-          category === 'car'
-            ? insightDetails(module.insights.approval, module)
-            : category === 'sleep'
-              ? module.standards
-                  .map((item) => insightDetails(item, module))
-                  .join('')
-              : '';
-        return `<section class="card topic-card" aria-labelledby="baby-${category}-heading"><h3 id="baby-${category}-heading">${escape(module.presentation.topicTitles[category])}</h3><div class="topic-tasks">${caseTaskCards('first_baby', tasks)}</div>${notes}</section>`;
-      })
-      .join('');
-  }
-
-  function renderBaby() {
-    const module = knowledge.first_baby;
-    workspace.innerHTML = `${caseHeading(module)}<div class="workspace-grid adaptive-workspace"><div class="stack"><section class="card"><div class="card-heading"><h3>${escape(audienceCopy(state).contextTitle)}</h3><span class="badge">${text('Esitäytetty profiili')}</span></div><p class="persona">${escape(module.persona)}</p>${module.controls.map((control) => choiceControl('first_baby', control)).join('')}<p class="fine-print persona-notice">${escape(module.demoNotice)}</p>${progressCard(module)}</section></div><div class="stack"><div id="case-tasks" class="stack">${babyTopics()}</div><section class="card supporting-notes" id="baby-insights"></section>${insightCard(hasPolicy(state, 'unborn-child') ? module.insights.existingInsurance : module.insights.insurance, module, `insurance-note ${hasPolicy(state, 'unborn-child') ? 'insurance-owned' : 'insurance-acquisition'}`)}<section class="card"><h3>${escape(module.actions[0].title)}</h3><p class="insight-text">${escape(module.actions[0].text)}</p><button type="button" class="primary-button" data-action="prepare-questions">${escape(module.actions[0].label)} ${icon('arrow')}</button>${evidence(module.actions[0], module)}</section></div></div>`;
-    updateBabyView();
-  }
-
-  function updateBabyView(tasksChanged = false) {
-    const module = knowledge.first_baby;
-    const context = state.cases.first_baby;
-    if (tasksChanged)
-      document.getElementById('case-tasks').innerHTML = babyTopics();
-    document.getElementById('baby-insights').innerHTML = insightDetails(
-      context.equipmentCondition === 'used'
-        ? module.insights.usedEquipment
-        : module.insights.newEquipment,
-      module,
-    );
-    updateCaseProgress();
-    if (tasksChanged) arrangeWorkspace();
-  }
-
-  function petChecks(entries, field) {
-    return `<div class="check-options">${entries.map((item) => `<div><label class="option-checkbox"><input type="checkbox" data-pet-field="${field}" value="${item.id}" ${state.cases.pet[field].includes(item.id) ? 'checked' : ''}><span>${escape(item.label)}</span></label>${evidence(item, knowledge.pet)}</div>`).join('')}</div>`;
-  }
-
-  function renderPet() {
-    const module = knowledge.pet;
-    workspace.innerHTML = `${caseHeading(module)}<section class="card route-card" id="pet-route" aria-live="polite" aria-labelledby="pet-route-heading"></section>
-      <div class="workspace-grid adaptive-workspace"><div class="stack"><section class="card"><div class="card-heading"><h3>${escape(audienceCopy(state).contextTitle)}</h3><span class="badge">${text('Esitäytetty profiili')}</span></div><p class="persona">${escape(module.persona)}</p><p class="fine-print">${escape(module.demoNotice)}</p>${progressCard(module)}</section></div>
-      <div class="stack">
-      <section class="card topic-card"><fieldset class="field"><legend>${escape(module.controls[0].label)}</legend><p class="field-help">${escape(module.controls[0].help)}</p>${petChecks(module.symptoms, 'symptomIds')}</fieldset>${choiceControl('pet', module.controls[2])}<p class="preparation-label">${escape(audienceCopy(state).tasksTitle || module.presentation.tasksTitle)}</p><div class="topic-tasks">${caseTaskCards('pet', ['symptom-timeline'])}</div></section>
-      <section class="card topic-card"><fieldset class="field"><legend>${escape(module.controls[1].label)}</legend><p class="field-help">${escape(module.controls[1].help)}</p>${petChecks(module.emergencySigns, 'emergencySignIds')}</fieldset><p class="preparation-label">${escape(audienceCopy(state).tasksTitle || module.presentation.tasksTitle)}</p><div class="topic-tasks">${caseTaskCards('pet', ['notice-urgency'])}</div></section>
-      <section class="card topic-card" aria-labelledby="observations-heading"><h3 id="observations-heading">${escape(module.presentation.observationsTitle)}</h3>${module.observations.map((item) => `<div class="field"><label for="observation-${item.id}">${escape(item.label)}</label><select id="observation-${item.id}" data-observation="${item.id}">${item.options.map((option) => `<option value="${option.value}" ${state.cases.pet.observations[item.id] === option.value ? 'selected' : ''}>${escape(option.label)}</option>`).join('')}</select>${evidence(item, module)}${item.id === 'waterRetention' ? `<p class="preparation-label">${escape(audienceCopy(state).tasksTitle || module.presentation.tasksTitle)}</p><div class="topic-tasks">${caseTaskCards('pet', ['water-observation'])}</div>` : ''}</div>`).join('')}</section>
-      <section class="card draft-card"><h3>${escape(module.packet.title)}</h3><p class="fine-print">${escape(module.presentation.notSent)}</p><p class="preparation-label">${escape(audienceCopy(state).tasksTitle || module.presentation.tasksTitle)}</p><div class="topic-tasks">${caseTaskCards('pet', ['background'])}</div><details class="packet-preview"><summary>${escape(module.presentation.packetLabel)}</summary><label class="sr-only" for="pet-packet">${escape(module.presentation.packetLabel)}</label><textarea id="pet-packet" rows="8" readonly></textarea></details>${evidence(module.packet, module)}</section>
-</div></div><div class="pet-guidance-feedback" id="pet-guidance-feedback" hidden><div><strong id="pet-feedback-heading"></strong><p class="fine-print">${escape(module.presentation.guidancePrompt)}</p></div><button type="button" class="primary-button" data-show-pet-guidance>${escape(module.presentation.showGuidanceLabel)} ${icon('arrow')}</button></div>`;
-    updatePetView();
-  }
-
-  function updatePetView() {
-    const module = knowledge.pet;
-    const route = petRoute(state);
-    const container = document.getElementById('pet-route');
-    const access = petServiceAccess(state);
-    const viewKey = `${route}:${access}:${!!state.cases.pet.introContactUsed}`;
-    if (container.dataset.viewKey !== viewKey) {
-      const insight = module.insights[route];
-      const action = petPrimaryAction(state);
-      const insured = access === 'included' && route !== 'emergency';
-      const intro = petIntroAvailable(state);
-      const used =
-        access === 'notIncluded' &&
-        state.cases.pet.introContactUsed &&
-        route !== 'emergency';
-      const boundary = module.insights.alwaysVisibleBoundary;
-      const title = insured
-        ? route === 'urgent'
-          ? module.presentation.insuredUrgentTitle
-          : module.presentation.insuredContactTitle
-        : insight.title;
-      container.dataset.route = route;
-      container.dataset.access = access;
-      container.dataset.viewKey = viewKey;
-      container.innerHTML = `<h3 id="pet-route-heading">${escape(title)}</h3><p>${escape(insight.text)}</p>${insured ? `<p class="service-access-text">${escape(module.service.access.includedText)}</p>` : ''}${intro ? `<div class="intro-offer" data-intro-offer><h4>${escape(module.introOffer.title)}</h4><p>${escape(module.introOffer.text)}</p><p class="fine-print">${escape(module.introOffer.notice)}</p>${evidence(module.introOffer, module)}</div>` : ''}${used ? `<p class="intro-used fine-print" data-intro-used>${escape(module.introOffer.usedText)}</p>` : ''}<p class="fine-print">${escape(insight.limitation)}</p><button type="button" class="primary-button" data-action="${action.id}">${escape(action.label)} ${icon('arrow')}</button>${insured ? `<details class="topic-details"><summary>${escape(module.presentation.channelDetailsLabel)}</summary><p class="fine-print">${escape(module.presentation.serviceHoursTemplate.replace('{weekday}', module.service.availability.weekdayChatVideo).replace('{weekend}', module.service.availability.weekendChatVideo).replace('{otherTimes}', module.service.availability.otherTimes))}</p><p class="fine-print">${escape(module.service.access.demoNotice)}</p>${evidence(module.service, module)}</details>` : ''}${evidence(insight, module)}${evidence(module.rules.routing, module)}<div class="emergency-boundary" aria-labelledby="boundary-heading"><h4 id="boundary-heading">${escape(boundary.title)}</h4><p class="fine-print">${escape(boundary.text)}</p><p class="fine-print">${escape(boundary.limitation)}</p>${evidence(boundary, module)}</div>`;
-    }
-    if (
-      dialog.open &&
-      ['pet', 'pet-info', 'policy'].includes(dialog.dataset.case) &&
-      dialog.dataset.route !== route
-    ) {
-      dialog.close();
-      const heading = document.getElementById('pet-route-heading');
-      heading.tabIndex = -1;
-      heading.focus();
-    }
-    document.getElementById('pet-packet').value = buildPetPacket(state);
-    if (dialog.open && dialog.dataset.case === 'pet')
-      document.getElementById('scenario-packet').value = buildPetPacket(state);
-    document.getElementById('pet-feedback-heading').textContent =
-      document.getElementById('pet-route-heading').textContent;
-    document.getElementById('pet-guidance-feedback').dataset.route = route;
-    syncPetGuidanceFeedback();
-    updateCaseProgress();
-  }
-
-  function syncPetGuidanceFeedback() {
-    if (state.activeCase !== 'pet') return;
-    const heading = document.getElementById('pet-route-heading');
-    if (!heading) return;
-    const bounds = heading.getBoundingClientRect();
-    const show =
-      petRoute(state) !== 'contact' &&
-      (bounds.bottom < 0 || bounds.top > window.innerHeight);
-    document.getElementById('pet-guidance-feedback').hidden = !show;
-    document.body.classList.toggle('pet-guidance-visible', show);
-  }
-
-  function openScenarioAction(actionId) {
-    const caseId = state.activeCase;
-    const module = knowledge[caseId];
-    const action =
-      caseId === 'pet'
-        ? petAction(state, actionId)
-        : module.actions.find((item) => item.id === actionId);
-    if (!action) return;
-    const packet =
-      caseId === 'pet' ? buildPetPacket(state) : buildBabyPacket(state);
-    document.getElementById('dialog-content').innerHTML =
-      `<h2 id="dialog-title">${escape(action.title)}</h2><p class="confirmation" id="dialog-confirmation">${escape(action.confirmation)}</p>${caseId === 'pet' && petRoute(state) !== 'contact' ? `<p class="limitation">${escape(module.insights[petRoute(state)].text)}</p>` : ''}<p>${escape(action.text)}</p><label class="packet-label" for="scenario-packet">${escape(module.presentation.packetLabel)}</label><textarea id="scenario-packet" rows="10" readonly></textarea><p class="fine-print">${escape(action.limitation)}</p>${evidence(action, module)}${action.id === 'intro-help' ? `<button type="button" class="primary-button" data-use-pet-intro>${escape(module.introOffer.confirmLabel)}</button><p id="intro-use-status" role="status"></p>` : ''}`;
-    document.getElementById('scenario-packet').value = packet;
-    dialog.dataset.case = caseId;
-    dialog.dataset.route = caseId === 'pet' ? petRoute(state) : '';
-    dialog.showModal();
-  }
+  const clipboard = { revision: 0 };
 
   function switchCase(caseId) {
     if (!scenarios.some((item) => item.id === caseId)) return;
@@ -988,169 +549,6 @@ import { icons } from '../ui/icons.js';
     arrangeWorkspace();
   }
 
-  function openHelp() {
-    const module = knowledge.new_home;
-    const action = module.actions[0];
-    document.getElementById('dialog-content').innerHTML =
-      `<h2 id="dialog-title">${escape(action.title)}</h2><p class="confirmation" id="dialog-confirmation">${escape(action.confirmation)}</p><p>${escape(action.text)}</p><label class="packet-label" for="help-packet">${text('Oma kysymyslistasi · voit valita ja kopioida tekstin')}</label><textarea id="help-packet" readonly rows="10"></textarea><p class="fine-print">${escape(action.limitation)}</p>${evidence(action, module)}`;
-    document.getElementById('help-packet').value = buildHomePacket(state);
-    dialog.dataset.case = 'new_home';
-    dialog.dataset.route = '';
-    dialog.showModal();
-  }
-
-  function renderAudienceContext() {
-    const experience = knowledge.new_home.experience;
-    const copy = experience[state.audience];
-    const customer = state.audience === 'customer';
-    document.querySelector('.intro .eyebrow').textContent = copy.eyebrow;
-    document.querySelector('.intro h1').innerHTML =
-      `${escape(copy.heroLine1)}<br><span>${escape(copy.heroLine2)}</span>`;
-    document.querySelector('.intro-copy').textContent = copy.heroText;
-    document.getElementById('audience-context').innerHTML =
-      `<div class="section-title"><h2 id="audience-title">${escape(copy.title)}</h2>${infoButton('policy', knowledge.new_home, experience.info.policyLabel)}</div>${customer ? `<fieldset class="portfolio-options"><legend>${escape(copy.portfolioLabel)}</legend>${experience.portfolios.map((item) => `<label class="portfolio-option"><input type="radio" name="customer-portfolio" data-portfolio="${item.id}" value="${item.id}" ${item.id === state.portfolioId ? 'checked' : ''}><span><strong>${escape(item.label)}</strong><span class="small-label">${escape(item.effect)}</span></span></label>`).join('')}</fieldset><p class="fine-print">${escape(copy.bundleNotice)}</p>` : `<p>${escape(copy.text)}</p>`}<p class="fine-print audience-notice">${escape(copy.notice)}</p>`;
-    document
-      .querySelectorAll('#audience-nav [data-audience]')
-      .forEach((link) =>
-        link.setAttribute(
-          'aria-current',
-          link.dataset.audience === state.audience ? 'page' : 'false',
-        ),
-      );
-  }
-
-  function updatePolicyContext() {
-    let panel = document.getElementById('policy-context');
-    if (!panel) {
-      panel = document.createElement('section');
-      panel.id = 'policy-context';
-      panel.className = 'policy-context';
-      panel.setAttribute(
-        'aria-label',
-        knowledge.new_home.experience.customer.portfolioLabel,
-      );
-      workspace.querySelector('.workspace-heading').after(panel);
-    }
-    panel.hidden = state.activeCase === 'pet';
-    const price =
-      state.activeCase === 'new_home' ? calculateHomePrice(state) : null;
-    panel.innerHTML = `<p>${escape(policyContext(state))}</p>${state.activeCase === 'new_home' ? `<div class="policy-price"><span class="small-label">${escape(knowledge.new_home.experience.policyContext.homePriceLabel)}</span><strong id="policy-price">${price ? `${money(price.projectedAnnualCents)} ${escape(knowledge.new_home.preventionIncentive.copy.perYear)}` : escape(knowledge.new_home.preventionIncentive.copy.unavailableLabel)}</strong></div>` : ''}${state.audience === 'customer' ? `<button type="button" class="text-button" data-policy-questions>${escape(knowledge.new_home.experience.policyContext.questionsLabel)} ${icon('arrow')}</button>` : ''}`;
-  }
-
-  function openPolicyQuestions() {
-    const copy = knowledge.new_home.experience.policyContext;
-    document.getElementById('dialog-content').innerHTML =
-      `<h2 id="dialog-title">${escape(copy.questionsTitle)}</h2><p class="confirmation" id="dialog-confirmation">${escape(copy.notSent)}</p><label class="packet-label" for="policy-packet">${escape(copy.packetLabel)}</label><textarea id="policy-packet" readonly rows="10"></textarea>`;
-    document.getElementById('policy-packet').value =
-      buildPolicyQuestions(state);
-    dialog.dataset.case = 'policy';
-    dialog.dataset.route = state.activeCase === 'pet' ? petRoute(state) : '';
-    dialog.showModal();
-  }
-
-  function renderPersonnel() {
-    const copy = knowledge.new_home.experience.staff;
-    document.getElementById('staff-title').textContent = copy.title;
-    document.getElementById('staff-subtitle').textContent = copy.subtitle;
-    document.getElementById('staff-notice').textContent = copy.notice;
-    workspace.innerHTML = `<section class="card analytics-filters" aria-labelledby="staff-filters-heading"><h2 id="staff-filters-heading">${escape(copy.filtersTitle)}</h2><div class="filter-controls"><div><label for="staff-policy-filter">${escape(copy.policyFilterLabel)}</label><select id="staff-policy-filter"><option value="all">${escape(copy.allPoliciesLabel)}</option>${copy.policyTypes.map((type) => `<option value="${type.id}">${escape(type.label)}</option>`).join('')}</select></div><div><label for="staff-case-filter">${escape(copy.caseFilterLabel)}</label><select id="staff-case-filter"><option value="all">${escape(copy.allCasesLabel)}</option>${scenarios.map((item) => `<option value="${item.id}">${escape(knowledge[item.id].title)}</option>`).join('')}</select></div></div><p class="fine-print" id="staff-filter-result" role="status"></p></section><div class="stack" id="staff-report"></div>`;
-    function renderReport() {
-      const analytics = staffAnalytics({
-        policyType: document.getElementById('staff-policy-filter').value,
-        caseId: document.getElementById('staff-case-filter').value,
-      });
-      const summary = analytics.summary;
-      const number = (value) =>
-        new Intl.NumberFormat(language === 'en' ? 'en-IE' : 'fi-FI', {
-          maximumFractionDigits: 1,
-        }).format(value);
-      const bars = (entries, feedback = false) =>
-        `<ul class="analytics-bars">${entries.map((entry) => `<li><div><span>${escape(entry.label)}</span><strong>${entry.count} ${escape(feedback ? (entry.count === 1 ? copy.feedbackSingularLabel : copy.feedbackCountLabel) : entry.count === 1 ? copy.unitSingularLabel : copy.unitLabel)}</strong></div><div class="analytics-track" aria-hidden="true"><span style="width:${summary.customers ? (entry.count / summary.customers) * 100 : 0}%"></span></div></li>`).join('')}</ul>`;
-      document.getElementById('staff-filter-result').textContent =
-        `${copy.filterResultLabel}: ${summary.customers}`;
-      document.getElementById('staff-report').innerHTML =
-        `<section class="card" aria-labelledby="staff-analytics-heading"><h2 id="staff-analytics-heading">${escape(copy.analyticsTitle)}</h2><p class="fine-print">${escape(copy.analyticsNotice)}</p><dl class="staff-metrics">${Object.entries(
-          copy.metricLabels,
-        )
-          .map(
-            ([key, label]) =>
-              `<div><dt>${escape(label)}</dt><dd id="staff-metric-${key}">${key === 'feedback' ? (summary.feedback === null ? '—' : `${number(summary.feedback)}<span class="metric-sample">${summary.feedbackCount} ${escape(summary.feedbackCount === 1 ? copy.feedbackSingularLabel : copy.feedbackCountLabel)}</span>`) : summary[key]}</dd></div>`,
-          )
-          .join('')}</dl></section>
-        <div class="analytics-grid"><section class="card" aria-labelledby="staff-distribution-heading"><h2 id="staff-distribution-heading">${escape(copy.distributionTitle)}</h2><p class="fine-print">${escape(copy.distributionNotice)}</p>${bars(analytics.policyDistribution)}</section><section class="card" aria-labelledby="staff-feedback-heading"><h2 id="staff-feedback-heading">${escape(copy.feedbackTitle)}</h2><p class="fine-print">${escape(copy.feedbackNotice)}</p>${bars(
-          analytics.feedbackDistribution.map((entry) => ({
-            label: `${entry.score}/5`,
-            count: entry.count,
-          })),
-          true,
-        )}</section></div>
-        <section class="card" aria-labelledby="staff-preparation-heading"><h2 id="staff-preparation-heading">${escape(copy.preparationTitle)}</h2><p class="fine-print">${escape(copy.preparationNotice)}</p><div class="table-scroll" role="region" tabindex="0" aria-label="${escape(copy.preparationTitle)}"><table><thead><tr><th scope="col">${escape(copy.caseColumn)}</th><th scope="col">${escape(copy.customerCountColumn)}</th><th scope="col">${escape(copy.taskCountColumn)}</th></tr></thead><tbody>${analytics.byCase.map((item) => `<tr><th scope="row">${escape(knowledge[item.id].title)}</th><td>${item.customers}</td><td>${item.total ? `${item.completed} / ${item.total}` : '—'}</td></tr>`).join('')}</tbody></table></div></section>
-        <section class="card" aria-labelledby="staff-table-heading"><h2 id="staff-table-heading">${escape(copy.tableTitle)}</h2><div class="table-scroll" role="region" tabindex="0" aria-label="${escape(copy.tableTitle)}"><table id="staff-customer-table"><caption>${escape(copy.tableCaption)}</caption><thead><tr>${Object.values(
-          copy.columns,
-        )
-          .map((label) => `<th scope="col">${escape(label)}</th>`)
-          .join(
-            '',
-          )}</tr></thead><tbody>${analytics.rows.map((customer) => `<tr><th scope="row">${escape(customer.name)}<span class="small-label">${escape(customer.id)}</span></th><td><ul class="table-policies">${customer.policies.map((policy) => `<li>${escape(policy.label)}</li>`).join('')}</ul></td><td>${escape(knowledge[customer.caseId].title)}</td><td>${customer.preparation.completed} / ${customer.preparation.total}</td><td><details><summary>${customer.feedbackScore}/5 · ${escape(copy.feedbackDetailsLabel)}</summary><p class="fine-print">${escape(customer.feedbackText)}</p></details></td></tr>`).join('')}</tbody></table></div>${analytics.rows.length ? '' : `<p class="empty-state">${escape(copy.emptyLabel)}</p>`}</section>`;
-    }
-    workspace.onchange = (event) => {
-      if (
-        ['staff-policy-filter', 'staff-case-filter'].includes(event.target.id)
-      )
-        renderReport();
-    };
-    renderReport();
-  }
-
-  // Capture the static document shell once; dynamic text comes from local knowledge.
-  const shellText = [];
-  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-  while (walker.nextNode()) {
-    const node = walker.currentNode;
-    if (canonicalKnowledge.new_home.uiEnglish[node.textContent.trim()])
-      shellText.push([node, node.textContent]);
-  }
-  const shellAttributes = [...document.querySelectorAll('[aria-label]')].map(
-    (node) => [node, node.getAttribute('aria-label')],
-  );
-  const originalTitle = document.title;
-  function updateLanguageShell() {
-    document.documentElement.lang = language;
-    document.title = text(originalTitle);
-    shellText.forEach(([node, original]) => {
-      node.textContent = original.replace(
-        original.trim(),
-        text(original.trim()),
-      );
-    });
-    shellAttributes.forEach(([node, original]) =>
-      node.setAttribute('aria-label', text(original)),
-    );
-    document
-      .querySelectorAll('[data-language]')
-      .forEach((button) =>
-        button.setAttribute(
-          'aria-pressed',
-          String(button.dataset.language === language),
-        ),
-      );
-    document.querySelectorAll('a[href]').forEach((link) => {
-      const raw = link.getAttribute('href');
-      if (!/^\.\/(index|personnel)\.html/.test(raw)) return;
-      const url = new URL(raw, location.href);
-      if (language === 'en') url.searchParams.set('lang', 'en');
-      else url.searchParams.delete('lang');
-      link.setAttribute(
-        'href',
-        `./${url.pathname.split('/').pop()}${url.search}${url.hash}`,
-      );
-    });
-  }
-  function renderAudienceNav() {
-    const experience = knowledge.new_home.experience;
-    document.getElementById('audience-nav').innerHTML =
-      `<span class="small-label">${escape(experience.roleLabel)}</span><a href="#tutustu" data-audience="visitor">${escape(experience.roles.visitor)}</a><a href="#asiakas" data-audience="customer">${escape(experience.roles.customer)}</a><a href="./personnel.html">${escape(experience.roles.staff)}</a>`;
-  }
   document
     .querySelector('.language-switch')
     .addEventListener('click', (event) => {
@@ -1166,7 +564,7 @@ import { icons } from '../ui/icons.js';
           : null;
       setLanguage(button.dataset.language);
       recordNavigation();
-      draftRevision++;
+      clipboard.revision++;
       if (filters) {
         renderPersonnel();
         document.getElementById('staff-policy-filter').value = filters[0];

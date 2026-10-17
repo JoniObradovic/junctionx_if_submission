@@ -6,8 +6,9 @@ const require = createRequire(import.meta.url);
 const axePath = require.resolve('axe-core/axe.min.js');
 export async function languageJourney(browser, baseURL, artifacts) {
   fs.mkdirSync(artifacts, { recursive: true });
+  let context;
   try {
-    const context = await browser.newContext({
+    context = await browser.newContext({
       viewport: { width: 1440, height: 1000 },
     });
     const page = await context.newPage();
@@ -21,7 +22,7 @@ export async function languageJourney(browser, baseURL, artifacts) {
     page.on('request', (r) => {
       if (
         /^https?:/.test(r.url()) &&
-        !new URL(r.url()).origin.includes('127.0.0.1')
+        new URL(r.url()).origin !== new URL(baseURL).origin
       )
         network.push(r.url());
     });
@@ -326,8 +327,7 @@ export async function languageJourney(browser, baseURL, artifacts) {
     console.log(
       'PASS: bilingual HTTP journey, analytics, responsive views and no external requests',
     );
-    await context.close();
   } finally {
-    /* Browser lifecycle belongs to Playwright. */
+    await context?.close();
   }
 }

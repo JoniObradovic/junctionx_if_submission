@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { canonicalKnowledge as knowledge } from '../../src/content/index.js';
+import {
+  canonicalKnowledge as knowledge,
+  canonicalExperience,
+} from '../../src/content/index.ts';
 import { createDomain } from '../../src/domain/engine.ts';
-const app = createDomain(knowledge);
+const app = createDomain(knowledge, canonicalExperience);
 const homeModule = () => structuredClone(knowledge.new_home);
 test('premium preview separates published-reference programme from proposed prevention saving', () => {
   const none = app.calculatePreventionPrice([]);

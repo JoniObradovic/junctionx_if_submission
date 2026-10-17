@@ -8,12 +8,16 @@
     <link rel="icon" href="data:," />
   </head>
   <body>
-    <a class="skip-link" href="#workspace">Siirry tilanteen sisältöön</a>
+    <a class="skip-link" href="#workspace" data-i18n="shell.skipSituation"
+      >Siirry tilanteen sisältöön</a
+    >
     <header class="site-header">
       <div class="brand" aria-label="If rinnalla">
         <span class="brand-mark" aria-hidden="true">if</span
         ><span
-          >rinnalla<span class="brand-subtitle"
+          >rinnalla<span
+            class="brand-subtitle"
+            data-i18n="shell.customerSubtitle"
             >Arjen pienet turvateot</span
           ></span
         >
@@ -22,6 +26,7 @@
         class="audience-nav"
         aria-label="Demon näkymä"
         id="audience-nav"
+        data-i18n-aria-label="shell.roleLabel"
       ></nav>
       <div class="language-switch" role="group" aria-label="Kieli / Language">
         <button type="button" data-language="fi" lang="fi" aria-pressed="true">
@@ -48,7 +53,7 @@
         </div>
         <div class="prototype-note">
           <span class="status-dot" aria-hidden="true"></span> Kokeile
-          kuvitteellisilla tiedoilla<span
+          kuvitteellisilla tiedoilla<span data-i18n="shell.memoryOnly"
             >Tiedot säilyvät vain tämän sivun muistissa.</span
           >
         </div>
@@ -62,6 +67,7 @@
         class="scenario-nav"
         aria-label="Elämäntilanteet"
         id="scenario-nav"
+        data-i18n-aria-label="shell.scenarios"
       ></nav>
       <section
         id="workspace"
@@ -79,7 +85,7 @@
         ><span
           >Kuvitteellinen demo · Vertailuvuosi 2026 · Ei henkilökohtaista
           vakuutus- tai terveysarviota</span
-        ><span>Pienin askelin eteenpäin.</span>
+        ><span data-i18n="shell.smallSteps">Pienin askelin eteenpäin.</span>
       </footer>
     </main>
     <dialog
@@ -88,13 +94,15 @@
       aria-describedby="dialog-confirmation"
     >
       <div class="dialog-heading">
-        <span class="eyebrow">Lisätiedot ja luonnokset</span
+        <span class="eyebrow" data-i18n="dialog.details"
+          >Lisätiedot ja luonnokset</span
         ><button
           type="button"
           class="icon-button"
           id="close-dialog"
           aria-label="Sulje ikkuna"
           autofocus
+          data-i18n-aria-label="dialog.close"
         >
           ×
         </button>

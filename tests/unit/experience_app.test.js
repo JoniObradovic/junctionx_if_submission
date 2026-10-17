@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { canonicalKnowledge as knowledge } from '../../src/content/index.js';
+import {
+  canonicalKnowledge as knowledge,
+  canonicalExperience,
+} from '../../src/content/index.ts';
 import { createDomain } from '../../src/domain/engine.ts';
-const app = createDomain(knowledge);
+const app = createDomain(knowledge, canonicalExperience);
 test('pet service depends on the fictional insurance portfolio, not just customer status', () => {
   const visitor = app.createState();
   assert.equal(app.petServiceAccess(visitor), 'unknown');
@@ -121,4 +124,20 @@ test('one-use introduction survives portfolio switches and emergencies bypass it
   }
   assert.equal(app.petRoute(state), 'urgent');
   assert.equal(app.createState('customer').cases.pet.introContactUsed, false);
+});
+
+test('staff cohort calculations include additional fictional policy records', () => {
+  const experience = structuredClone(canonicalExperience);
+  experience.staff.policyTypes.push({ id: 'cat', label: 'Cat insurance' });
+  experience.staff.customers[0].extraPolicies = [
+    { type: 'cat', label: 'Cat insurance' },
+  ];
+  const domain = createDomain(knowledge, experience);
+  const cohort = domain.staffAnalytics({ policyType: 'cat' });
+  assert.equal(cohort.summary.customers, 1);
+  assert.equal(cohort.summary.policies, 4);
+  assert.equal(
+    cohort.policyDistribution.find((item) => item.id === 'cat').count,
+    1,
+  );
 });

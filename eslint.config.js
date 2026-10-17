@@ -26,6 +26,7 @@ export default tseslint.config(
         getComputedStyle: 'readonly',
         Event: 'readonly',
         requestAnimationFrame: 'readonly',
+        cancelAnimationFrame: 'readonly',
         setTimeout: 'readonly',
         console: 'readonly',
         process: 'readonly',

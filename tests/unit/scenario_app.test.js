@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { canonicalKnowledge as knowledge } from '../../src/content/index.js';
+import {
+  canonicalKnowledge as knowledge,
+  canonicalExperience,
+} from '../../src/content/index.ts';
 import { createDomain } from '../../src/domain/engine.ts';
-const app = createDomain(knowledge);
+const app = createDomain(knowledge, canonicalExperience);
 test('absence dates and strict 7/8-day priority boundary agree in both seasons', () => {
   const state = app.createState();
   assert.equal(app.absenceTrip(state).returnDate, '2026-03-01');
