@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="fi">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#FAF9F7">
+    <title>If rinnalla — Pieni teko tänään.</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="./css/nordic-theme.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#workspace">Siirry tilanteen sisältöön</a>
+    <header class="site-header">
+      <div class="brand" aria-label="If rinnalla">
+        <span class="brand-mark" aria-hidden="true">if</span><span>rinnalla<span class="brand-subtitle">Arjen pienet turvateot</span></span>
+      </div>
+      <nav class="audience-nav" aria-label="Demon näkymä" id="audience-nav">
+      </nav>
+      <div class="language-switch" role="group" aria-label="Kieli / Language">
+        <button type="button" data-language="fi" lang="fi" aria-pressed="true">FI<span class="sr-only"> · Suomi</span></button><button type="button" data-language="en" lang="en" aria-pressed="false">EN<span class="sr-only"> · English</span></button>
+      </div>
+    </header>
+    <main class="page">
+      <div class="intro">
+        <div>
+          <p class="eyebrow">Elämä muuttuu. Olemme rinnalla.</p><h1>Pieni teko tänään.<br><span>Huolettomampi huominen.</span></h1><p class="intro-copy">Valitse elämäntilanteesi. Aloitetaan siitä, mihin voit vaikuttaa juuri nyt.</p>
+        </div>
+        <div class="prototype-note">
+          <span class="status-dot" aria-hidden="true"></span> Kokeile kuvitteellisilla tiedoilla<span>Tiedot säilyvät vain tämän sivun muistissa.</span>
+        </div>
+      </div>
+      <section class="audience-context" id="audience-context" aria-labelledby="audience-title">
+      </section>
+      <nav class="scenario-nav" aria-label="Elämäntilanteet" id="scenario-nav">
+      </nav>
+      <section id="workspace" tabindex="-1" aria-labelledby="scenario-title">
+      </section>
+      <noscript>
+        <p class="card">Ota JavaScript käyttöön, jotta voit kokeilla elämäntilanteita. Sovellus toimii ilman verkkoyhteyttä.</p>
+      </noscript>
+      <footer class="site-footer">
+        <span class="footer-brand">if rinnalla</span><span>Kuvitteellinen demo · Vertailuvuosi 2026 · Ei henkilökohtaista vakuutus- tai terveysarviota</span><span>Pienin askelin eteenpäin.</span>
+      </footer>
+    </main>
+    <dialog id="help-dialog" aria-labelledby="dialog-title" aria-describedby="dialog-confirmation">
+      <div class="dialog-heading">
+        <span class="eyebrow">Lisätiedot ja luonnokset</span><button type="button" class="icon-button" id="close-dialog" aria-label="Sulje ikkuna" autofocus>×</button>
+      </div>
+      <div id="dialog-content">
+      </div>
+    </dialog>
+    <script src="./assets/icons.js"></script>
+    <script src="./knowledge/01-new-home.js"></script>
+    <script src="./knowledge/02-unoccupied-home.js"></script>
+    <script src="./knowledge/03-first-baby.js"></script>
+    <script src="./knowledge/04-pet-wellbeing.js"></script>
+    <script src="./js/app.js"></script>
+  </body>
+</html>
