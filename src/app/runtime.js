@@ -1,7 +1,79 @@
+import { parseNavigation, navigationUrl } from './navigation.ts';
+import { createDomain } from '../domain/engine.ts';
 import { canonicalKnowledge } from '../content/index.js';
 import { icons } from '../ui/icons.js';
 (function () {
   'use strict';
+
+  const domain = createDomain(canonicalKnowledge);
+  const {
+    createState,
+    updateHome,
+    setTaskComplete,
+    readiness,
+    updateScenario,
+    absenceTrip,
+    absencePriority,
+    setAssignment,
+    setPetSelection,
+    setPetObservation,
+    petRoute,
+    petIntroAvailable,
+    usePetIntro,
+    hasPolicy,
+    petServiceAccess,
+    setPortfolio,
+    calculateHomePrice,
+  } = domain;
+  // Rule results select identities. Display records always come from the active catalogue.
+  const applicableTasks = (state, id) =>
+    domain
+      .applicableTasks(state, id)
+      .map((task) => knowledge[id].tasks.find((item) => item.id === task.id));
+  const visibleTasks = (state, id) =>
+    domain
+      .visibleTasks(state, id)
+      .map((task) => knowledge[id].tasks.find((item) => item.id === task.id));
+  const petPrimaryAction = (state) => {
+    const action = domain.petPrimaryAction(state);
+    return action
+      ? knowledge.pet.actions.find((item) => item.id === action.id)
+      : null;
+  };
+  const homeGuidance = (state) => {
+    const result = domain.homeGuidance(state);
+    return {
+      ...result,
+      nextTask:
+        knowledge.new_home.tasks.find(
+          (item) => item.id === result.nextTask?.id,
+        ) || null,
+    };
+  };
+  const staffAnalytics = (filters) => {
+    const result = domain.staffAnalytics(filters);
+    if (!result) return null;
+    const experience = knowledge.new_home.experience;
+    return {
+      ...result,
+      rows: result.rows.map((row) => ({
+        ...row,
+        ...experience.staff.customers.find((item) => item.id === row.id),
+        policies: row.policies.map((policy) => ({
+          ...policy,
+          label:
+            experience.portfolios
+              .flatMap((item) => item.policies)
+              .find((item) => item.type === policy.type)?.label || policy.label,
+        })),
+      })),
+      policyDistribution: result.policyDistribution.map((item) => ({
+        ...item,
+        label: experience.staff.policyTypes.find((type) => type.id === item.id)
+          .label,
+      })),
+    };
+  };
 
   let knowledge = canonicalKnowledge;
   let language = 'fi';
@@ -42,162 +114,6 @@ import { icons } from '../ui/icons.js';
     { id: 'first_baby', icon: 'baby', label: 'Ensimmäinen lapsi' },
     { id: 'pet', icon: 'paw', label: 'Lemmikin vointi' },
   ];
-
-  function calculateDeduction(year, module = knowledge.new_home) {
-    const control = module.controls.find((item) => item.id === 'pipeworkYear');
-    if (
-      !Number.isInteger(year) ||
-      year < control.min ||
-      year > control.max ||
-      year > module.referenceYear
-    )
-      return null;
-    const age = module.referenceYear - year;
-    const band = module.rules.leakageDeduction.bands.find(
-      (item) =>
-        age >= item.minAge && (item.maxAge === null || age <= item.maxAge),
-    );
-    if (!band) return null;
-    return {
-      age,
-      deductionPercent: band.deductionPercent,
-      remainingPercent: 100 - band.deductionPercent,
-      coverageKnown: false,
-    };
-  }
-
-  function createState(audience = 'visitor') {
-    const cases = {};
-    scenarios.forEach(({ id }) => {
-      const defaults = JSON.parse(JSON.stringify(knowledge[id].defaults));
-      cases[id] = {
-        ...defaults,
-        completedTaskIds: new Set(defaults.completedTaskIds || []),
-      };
-      if (id === 'absence')
-        cases[id].assignedTaskIds = new Set(defaults.assignedTaskIds);
-    });
-    cases.new_home.lastKnownPipeworkYear = cases.new_home.pipeworkYear;
-    return {
-      activeCase: 'new_home',
-      audience: audience === 'customer' ? 'customer' : 'visitor',
-      portfolioId: 'multi',
-      cases,
-    };
-  }
-
-  function updateHome(state, field, value) {
-    const home = state.cases.new_home;
-    if (field === 'pipeworkYear') {
-      home.pipeworkYear = calculateDeduction(value) ? value : null;
-      if (home.pipeworkYear !== null) home.lastKnownPipeworkYear = value;
-    } else if (field === 'surfaceYear') {
-      const control = knowledge.new_home.controls.find(
-        (item) => item.id === field,
-      );
-      if (control.options.some((option) => option.value === value))
-        home.surfaceYear = value;
-    }
-  }
-
-  function setTaskComplete(state, caseId, taskId, complete) {
-    if (!knowledge[caseId].tasks.some((task) => task.id === taskId)) return;
-    const completed = state.cases[caseId].completedTaskIds;
-    if (complete) completed.add(taskId);
-    else completed.delete(taskId);
-  }
-
-  function applicableTasks(state, caseId) {
-    return knowledge[caseId].tasks.filter(
-      (task) =>
-        Object.entries(task.when || {}).every(
-          ([field, value]) => state.cases[caseId][field] === value,
-        ) &&
-        (!task.requiresPolicyType || hasPolicy(state, task.requiresPolicyType)),
-    );
-  }
-
-  function visibleTasks(state, caseId) {
-    return applicableTasks(state, caseId).filter(
-      (task) =>
-        caseId !== 'first_baby' ||
-        state.cases.first_baby.category === 'all' ||
-        task.category === state.cases.first_baby.category,
-    );
-  }
-
-  function readiness(state, caseId) {
-    const tasks = applicableTasks(state, caseId);
-    const completed = tasks.filter((task) =>
-      state.cases[caseId].completedTaskIds.has(task.id),
-    ).length;
-    return {
-      completed,
-      total: tasks.length,
-      percent: tasks.length ? Math.round((completed / tasks.length) * 100) : 0,
-    };
-  }
-
-  function updateScenario(state, caseId, field, value) {
-    const control = knowledge[caseId]?.controls.find(
-      (item) => item.id === field,
-    );
-    if (!control || !state.cases[caseId]) return false;
-    if (
-      control.type === 'choice' &&
-      !control.options.some((option) => option.value === value)
-    )
-      return false;
-    if (
-      control.type === 'range' &&
-      (!Number.isInteger(value) || value < control.min || value > control.max)
-    )
-      return false;
-    if (!['choice', 'range'].includes(control.type)) return false;
-    state.cases[caseId][field] = value;
-    return true;
-  }
-
-  function absenceTrip(state) {
-    const context = state.cases.absence;
-    const module = knowledge.absence;
-    const control = module.controls.find((item) => item.id === 'durationDays');
-    const departure = module.rules.tripDates.departureBySeason[context.season];
-    if (
-      !departure ||
-      !Number.isInteger(context.durationDays) ||
-      context.durationDays < control.min ||
-      context.durationDays > control.max
-    )
-      return null;
-    const date = new Date(`${departure}T00:00:00Z`);
-    if (!Number.isFinite(date.getTime())) return null;
-    date.setUTCDate(date.getUTCDate() + context.durationDays);
-    return {
-      departure,
-      returnDate: date.toISOString().slice(0, 10),
-      durationDays: context.durationDays,
-    };
-  }
-
-  function absencePriority(state, task) {
-    const rule = knowledge.absence.rules.priorityEscalation;
-    return absenceTrip(state) &&
-      state.cases.absence.durationDays > rule.durationDaysGreaterThan &&
-      rule.taskIds.includes(task.id)
-      ? rule.priority
-      : task.priority;
-  }
-
-  function setAssignment(state, taskId, assigned) {
-    const task = visibleTasks(state, 'absence').find(
-      (item) => item.id === taskId,
-    );
-    if (!task?.delegatable) return false;
-    if (assigned) state.cases.absence.assignedTaskIds.add(taskId);
-    else state.cases.absence.assignedTaskIds.delete(taskId);
-    return true;
-  }
 
   function displayDate(iso) {
     return new Intl.DateTimeFormat(language === 'en' ? 'en-GB' : 'fi-FI', {
@@ -245,88 +161,9 @@ import { icons } from '../ui/icons.js';
     };
   }
 
-  function setPetSelection(state, field, id, selected) {
-    const entries =
-      field === 'symptomIds'
-        ? knowledge.pet.symptoms
-        : field === 'emergencySignIds'
-          ? knowledge.pet.emergencySigns
-          : [];
-    if (!entries.some((item) => item.id === id)) return false;
-    const values = new Set(state.cases.pet[field]);
-    if (selected) values.add(id);
-    else values.delete(id);
-    state.cases.pet[field] = [...values];
-    return true;
-  }
-
-  function setPetObservation(state, id, value) {
-    if (
-      !knowledge.pet.observations.some(
-        (item) =>
-          item.id === id &&
-          item.options.some((option) => option.value === value),
-      )
-    )
-      return false;
-    state.cases.pet.observations[id] = value;
-    return true;
-  }
-
-  function petRoute(state) {
-    const context = state.cases.pet;
-    const rule = knowledge.pet.rules.routing;
-    const symptoms = new Set(context.symptomIds || []);
-    if (
-      (rule.emergency.anyEmergencySign && context.emergencySignIds?.length) ||
-      rule.emergency.anyObservationEquals.some(
-        (item) => context.observations?.[item.id] === item.value,
-      )
-    )
-      return 'emergency';
-    const durationRule = rule.urgent.allSymptomIdsWithDuration;
-    if (
-      rule.urgent.anySymptomIds.some((id) => symptoms.has(id)) ||
-      (context.duration === durationRule.duration &&
-        durationRule.symptomIds.every((id) => symptoms.has(id)))
-    )
-      return 'urgent';
-    return rule.fallbackRoute;
-  }
-
-  function petPrimaryAction(currentState) {
-    const route = petRoute(currentState);
-    if (petIntroAvailable(currentState))
-      return knowledge.pet.actions.find((action) => action.id === 'intro-help');
-    const mapping =
-      petServiceAccess(currentState) === 'included'
-        ? knowledge.pet.rules.routing.insuredActionByRoute
-        : knowledge.pet.rules.routing.primaryActionByRoute;
-    return (
-      knowledge.pet.actions.find(
-        (action) =>
-          action.id === mapping[route] && action.allowedRoutes.includes(route),
-      ) || null
-    );
-  }
-
   function petAction(state, actionId) {
     const action = petPrimaryAction(state);
     return action?.id === actionId ? action : null;
-  }
-
-  function petIntroAvailable(currentState) {
-    return (
-      petServiceAccess(currentState) === 'notIncluded' &&
-      !currentState.cases.pet.introContactUsed &&
-      petRoute(currentState) !== 'emergency'
-    );
-  }
-
-  function usePetIntro(currentState) {
-    if (!petIntroAvailable(currentState)) return false;
-    currentState.cases.pet.introContactUsed = true;
-    return true;
   }
 
   function buildPetPacket(state) {
@@ -391,95 +228,6 @@ import { icons } from '../ui/icons.js';
     ].join('\n');
   }
 
-  function calculatePreventionPrice(
-    completedTaskIds,
-    module = knowledge.new_home,
-  ) {
-    const config = module?.preventionIncentive;
-    const isRate = (value) =>
-      Number.isInteger(value) && value >= 0 && value < 10000;
-    if (
-      !config ||
-      config.status !== 'illustrative' ||
-      typeof config.policyId !== 'string' ||
-      !config.policyId.trim() ||
-      !Number.isSafeInteger(config.baseAnnualCents) ||
-      config.baseAnnualCents <= 0 ||
-      !isRate(config.bundleDiscountBps) ||
-      !isRate(config.preventionCapBps) ||
-      config.rounding !== 'half-up-per-stage' ||
-      !Array.isArray(config.eligibleActions) ||
-      !Array.isArray(module.tasks) ||
-      !completedTaskIds ||
-      typeof completedTaskIds === 'string' ||
-      typeof completedTaskIds[Symbol.iterator] !== 'function'
-    )
-      return null;
-    const completed = new Set(completedTaskIds);
-    const taskIds = new Set(module.tasks.map((task) => task.id));
-    const actions = new Map();
-    const actionByTask = new Map();
-    for (const action of config.eligibleActions) {
-      if (!action || typeof action.policyId !== 'string') return null;
-      if (action.policyId !== config.policyId) continue;
-      if (
-        typeof action.id !== 'string' ||
-        !action.id.trim() ||
-        !taskIds.has(action.taskId) ||
-        !isRate(action.discountBps)
-      )
-        return null;
-      const existing =
-        actions.get(action.id) || actionByTask.get(action.taskId);
-      if (existing) {
-        if (
-          existing.id !== action.id ||
-          existing.taskId !== action.taskId ||
-          existing.discountBps !== action.discountBps
-        )
-          return null;
-        continue;
-      }
-      actions.set(action.id, action);
-      actionByTask.set(action.taskId, action);
-    }
-    let preventionDiscountBps = 0;
-    let completedActionCount = 0;
-    for (const action of actions.values()) {
-      if (!completed.has(action.taskId)) continue;
-      preventionDiscountBps = Math.min(
-        config.preventionCapBps,
-        preventionDiscountBps + action.discountBps,
-      );
-      completedActionCount++;
-    }
-    // Calculate in integer cents; round the remaining price at each stage.
-    const applyRate = (cents, bps) =>
-      Number((BigInt(cents) * BigInt(10000 - bps) + 5000n) / 10000n);
-    const afterBundleCents = applyRate(
-      config.baseAnnualCents,
-      config.bundleDiscountBps,
-    );
-    const projectedAnnualCents = applyRate(
-      afterBundleCents,
-      preventionDiscountBps,
-    );
-    if (afterBundleCents <= 0 || projectedAnnualCents <= 0) return null;
-    return {
-      baseAnnualCents: config.baseAnnualCents,
-      bundleDiscountBps: config.bundleDiscountBps,
-      bundleSavingCents: config.baseAnnualCents - afterBundleCents,
-      afterBundleCents,
-      preventionDiscountBps,
-      preventionSavingCents: afterBundleCents - projectedAnnualCents,
-      projectedAnnualCents,
-      completedActionCount,
-      eligibleActionCount: actions.size,
-      preventionCapBps: config.preventionCapBps,
-      approval: 'not-assessed',
-    };
-  }
-
   function buildHomePacket(state) {
     const module = knowledge.new_home;
     const home = state.cases.new_home;
@@ -510,86 +258,11 @@ import { icons } from '../ui/icons.js';
     ];
   }
 
-  function currentPolicies(currentState) {
-    if (currentState.audience !== 'customer') return [];
-    const portfolio = knowledge.new_home.experience.portfolios.find(
-      (item) => item.id === currentState.portfolioId,
-    );
-    return portfolio
-      ? [...portfolio.policies, ...(currentState.extraPolicies || [])]
-      : [];
-  }
-
-  function hasPolicy(currentState, type) {
-    return currentPolicies(currentState).some((policy) => policy.type === type);
-  }
-
   function visibleBenefits(currentState) {
     return knowledge.new_home.publishedBenefits.items.filter(
       (item) =>
         !item.audiences || item.audiences.includes(currentState.audience),
     );
-  }
-
-  function petServiceAccess(currentState) {
-    if (currentState.audience !== 'customer') return 'unknown';
-    const portfolio = knowledge.new_home.experience.portfolios.find(
-      (item) => item.id === currentState.portfolioId,
-    );
-    if (!portfolio) return 'unknown';
-    return portfolio.policies.some((policy) =>
-      knowledge.pet.service.eligibleInsuranceTypes.includes(policy.type),
-    )
-      ? 'included'
-      : 'notIncluded';
-  }
-
-  function setPortfolio(currentState, portfolioId) {
-    if (
-      currentState.audience !== 'customer' ||
-      !knowledge.new_home.experience.portfolios.some(
-        (item) => item.id === portfolioId,
-      )
-    )
-      return false;
-    currentState.portfolioId = portfolioId;
-    return true;
-  }
-
-  function calculateHomePrice(currentState) {
-    const module = knowledge.new_home;
-    const portfolio = knowledge.new_home.experience.portfolios.find(
-      (item) => item.id === currentState.portfolioId,
-    );
-    if (currentState.audience === 'customer' && !portfolio) return null;
-    const bundleDiscountBps =
-      currentState.audience === 'customer'
-        ? portfolio.demoBundleDiscountBps
-        : 0;
-    return calculatePreventionPrice(
-      currentState.cases.new_home.completedTaskIds,
-      {
-        ...module,
-        preventionIncentive: {
-          ...module.preventionIncentive,
-          bundleDiscountBps,
-        },
-      },
-    );
-  }
-
-  function homeGuidance(currentState) {
-    const module = knowledge.new_home;
-    const completed = currentState.cases.new_home.completedTaskIds;
-    const result = calculateDeduction(currentState.cases.new_home.pipeworkYear);
-    const pending = module.tasks.filter((task) => !completed.has(task.id));
-    const nextTask =
-      ((!result || result.deductionPercent > 0) &&
-        pending.find((task) => task.id === 'professional-review')) ||
-      pending.find((task) => task.id !== 'professional-review') ||
-      pending[0] ||
-      null;
-    return { result, nextTask };
   }
 
   function policyContext(currentState) {
@@ -650,98 +323,46 @@ import { icons } from '../ui/icons.js';
     return lines.join('\n');
   }
 
-  function staffAnalytics({ policyType = 'all', caseId = 'all' } = {}) {
-    const copy = knowledge.new_home.experience.staff;
-    if (
-      policyType !== 'all' &&
-      !copy.policyTypes.some((item) => item.id === policyType)
-    )
-      return null;
-    if (caseId !== 'all' && !scenarios.some((item) => item.id === caseId))
-      return null;
-    const rows = copy.customers
-      .map((customer) => {
-        const example = createState('customer');
-        example.portfolioId = customer.portfolioId;
-        example.extraPolicies = customer.extraPolicies || [];
-        example.cases[customer.caseId].completedTaskIds = new Set(
-          customer.completedTaskIds,
-        );
-        return {
-          ...customer,
-          policies: currentPolicies(example),
-          preparation: readiness(example, customer.caseId),
-        };
-      })
-      .filter(
-        (customer) =>
-          (policyType === 'all' ||
-            customer.policies.some((policy) => policy.type === policyType)) &&
-          (caseId === 'all' || customer.caseId === caseId),
-      );
-    const feedback = rows.filter(
-      (item) =>
-        Number.isInteger(item.feedbackScore) &&
-        item.feedbackScore >= 1 &&
-        item.feedbackScore <= 5,
-    );
-    return {
-      rows,
-      summary: {
-        customers: rows.length,
-        policies: rows.reduce((sum, item) => sum + item.policies.length, 0),
-        multi: rows.filter((item) => item.policies.length > 1).length,
-        feedback: feedback.length
-          ? feedback.reduce((sum, item) => sum + item.feedbackScore, 0) /
-            feedback.length
-          : null,
-        feedbackCount: feedback.length,
-        completed: rows.reduce(
-          (sum, item) => sum + item.preparation.completed,
-          0,
-        ),
-        total: rows.reduce((sum, item) => sum + item.preparation.total, 0),
-      },
-      policyDistribution: copy.policyTypes.map((type) => ({
-        ...type,
-        count: rows.reduce(
-          (sum, item) =>
-            sum +
-            item.policies.filter((policy) => policy.type === type.id).length,
-          0,
-        ),
-      })),
-      feedbackDistribution: [1, 2, 3, 4, 5].map((score) => ({
-        score,
-        count: feedback.filter((item) => item.feedbackScore === score).length,
-      })),
-      byCase: scenarios.map((scenario) => {
-        const customers = rows.filter((item) => item.caseId === scenario.id);
-        return {
-          id: scenario.id,
-          customers: customers.length,
-          completed: customers.reduce(
-            (sum, item) => sum + item.preparation.completed,
-            0,
-          ),
-          total: customers.reduce(
-            (sum, item) => sum + item.preparation.total,
-            0,
-          ),
-        };
-      }),
-    };
-  }
-
   const workspace = document.getElementById('workspace');
+  const initialNavigation = parseNavigation(new URL(location.href));
   const audienceStates = {
     visitor: createState('visitor'),
     customer: createState('customer'),
   };
-  let state =
-    audienceStates[
-      window.location.hash === '#asiakas' ? 'customer' : 'visitor'
-    ];
+  let state = audienceStates[initialNavigation.audience];
+  state.activeCase = initialNavigation.caseId;
+  if (state.audience === 'customer')
+    setPortfolio(state, initialNavigation.portfolioId);
+  function recordNavigation(push = true) {
+    const next = navigationUrl(new URL(location.href), {
+      language,
+      audience: state.audience,
+      caseId: state.activeCase,
+      portfolioId: state.portfolioId,
+    });
+    if (next.href !== location.href)
+      history[push ? 'pushState' : 'replaceState'](null, '', next);
+  }
+  function restoreNavigation() {
+    const next = parseNavigation(new URL(location.href));
+    if (dialog?.open) dialog.close();
+    setLanguage(next.language);
+    draftRevision++;
+    if (document.body.dataset.page === 'personnel') {
+      renderPersonnel();
+      updateLanguageShell();
+      return;
+    }
+    state = audienceStates[next.audience];
+    state.activeCase = next.caseId;
+    if (state.audience === 'customer') setPortfolio(state, next.portfolioId);
+    renderAudienceNav();
+    renderAudienceContext();
+    renderNav();
+    switchCase(next.caseId);
+    updateLanguageShell();
+  }
+  window.addEventListener('popstate', restoreNavigation);
   const nav = document.getElementById('scenario-nav');
   const dialog = document.getElementById('help-dialog');
   let layoutObserver;
@@ -1427,19 +1048,6 @@ import { icons } from '../ui/icons.js';
     dialog.showModal();
   }
 
-  function switchAudience() {
-    const audience =
-      window.location.hash === '#asiakas' ? 'customer' : 'visitor';
-    if (state.audience === audience) return;
-    if (dialog.open) dialog.close();
-    const activeCase = state.activeCase;
-    state = audienceStates[audience];
-    state.activeCase = activeCase;
-    renderAudienceContext();
-    renderNav();
-    switchCase(activeCase);
-  }
-
   function renderPersonnel() {
     const copy = knowledge.new_home.experience.staff;
     document.getElementById('staff-title').textContent = copy.title;
@@ -1557,9 +1165,7 @@ import { icons } from '../ui/icons.js';
             ]
           : null;
       setLanguage(button.dataset.language);
-      const currentUrl = new URL(location.href);
-      currentUrl.searchParams.set('lang', language);
-      history.replaceState(null, '', currentUrl);
+      recordNavigation();
       draftRevision++;
       if (filters) {
         renderPersonnel();
@@ -1577,9 +1183,7 @@ import { icons } from '../ui/icons.js';
       updateLanguageShell();
       button.focus();
     });
-  setLanguage(
-    new URLSearchParams(location.search).get('lang') === 'en' ? 'en' : 'fi',
-  );
+  setLanguage(initialNavigation.language);
   if (document.body.dataset.page === 'personnel') {
     renderPersonnel();
     updateLanguageShell();
@@ -1587,7 +1191,30 @@ import { icons } from '../ui/icons.js';
   }
   renderAudienceNav();
   renderAudienceContext();
-  window.addEventListener('hashchange', switchAudience);
+  window.addEventListener('hashchange', restoreNavigation);
+  document.getElementById('audience-nav').addEventListener('click', (event) => {
+    const link = event.target.closest('[data-audience]');
+    if (
+      !link ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey ||
+      event.altKey ||
+      event.button !== 0
+    )
+      return;
+    event.preventDefault();
+    const audience = link.dataset.audience;
+    const next = navigationUrl(new URL(location.href), {
+      language,
+      audience,
+      caseId: state.activeCase,
+      portfolioId: audienceStates[audience].portfolioId,
+    });
+    history.pushState(null, '', next);
+    restoreNavigation();
+  });
+
   document
     .getElementById('audience-context')
     .addEventListener('change', (event) => {
@@ -1598,11 +1225,15 @@ import { icons } from '../ui/icons.js';
         return;
       renderNav();
       switchCase(state.activeCase);
+      recordNavigation();
     });
 
   nav.addEventListener('click', (event) => {
     const button = event.target.closest('[data-case]');
-    if (button) switchCase(button.dataset.case);
+    if (button) {
+      switchCase(button.dataset.case);
+      recordNavigation();
+    }
   });
   workspace.addEventListener('click', (event) => {
     const button = event.target.closest('button');
@@ -1640,6 +1271,7 @@ import { icons } from '../ui/icons.js';
     }
     if (button.dataset.case) {
       switchCase(button.dataset.case);
+      recordNavigation();
       workspace.focus();
     }
     if (button.id === 'copy-absence') {

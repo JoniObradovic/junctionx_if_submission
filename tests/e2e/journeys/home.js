@@ -10,7 +10,9 @@ const axePath = require.resolve('axe-core/axe.min.js');
 export async function homeJourney(browser, baseURL, artifacts) {
   fs.mkdirSync(artifacts, { recursive: true });
   try {
-    console.log(`Browser: Chromium ${browser.version()}`);
+    console.log(
+      `Browser: ${browser.browserType().name()} ${browser.version()}`,
+    );
     const context = await browser.newContext({
       viewport: { width: 1440, height: 1000 },
     });
@@ -390,18 +392,15 @@ export async function homeJourney(browser, baseURL, artifacts) {
     await page.emulateMedia({ media: 'print' });
     assert.equal(await page.locator('#scenario-nav').isVisible(), false);
     assert.equal(await page.locator('#workspace').isVisible(), true);
-    await page.pdf({
-      path: path.join(artifacts, 'new-home-print.pdf'),
-      format: 'A4',
-    });
-    assert.deepEqual(
-      network,
-      [],
-      'no HTTP requests while using the file-based app',
-    );
+    if (browser.browserType().name() === 'chromium')
+      await page.pdf({
+        path: path.join(artifacts, 'new-home-print.pdf'),
+        format: 'A4',
+      });
+    assert.deepEqual(network, [], 'no external service requests');
     assert.deepEqual(errors, [], 'no console, page or local resource errors');
     console.log(
-      `PASS: file:// offline; live pricing, eligible actions, cap, undo, preparation exclusion, unknown price, source/status labels and published benefits; deduction boundaries, keyboard focus, independent controls, readiness, persistence, contextual information, source details, modal, mobile, reduced motion and print. Artifacts: ${artifacts}`,
+      `PASS: built HTTP demo; live pricing, eligible actions, cap, undo, preparation exclusion, unknown price, source/status labels and published benefits; deduction boundaries, keyboard focus, independent controls, readiness, persistence, contextual information, source details, modal, mobile, reduced motion and print. Artifacts: ${artifacts}`,
     );
   } finally {
     /* Browser lifecycle belongs to Playwright. */

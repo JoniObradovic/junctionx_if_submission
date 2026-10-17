@@ -40,7 +40,9 @@ import fs from 'node:fs';
 export async function scenariosJourney(browser, baseURL, artifacts) {
   fs.mkdirSync(artifacts, { recursive: true });
   try {
-    console.log(`Browser: Chromium ${browser.version()}`);
+    console.log(
+      `Browser: ${browser.browserType().name()} ${browser.version()}`,
+    );
     const context = await browser.newContext({
       viewport: { width: 1440, height: 1000 },
     });
@@ -494,10 +496,11 @@ export async function scenariosJourney(browser, baseURL, artifacts) {
       });
       await page.emulateMedia({ media: 'print', reducedMotion: 'reduce' });
       assert.equal(await page.locator('#workspace').isVisible(), true);
-      await page.pdf({
-        path: path.join(artifacts, `${id}-print.pdf`),
-        format: 'A4',
-      });
+      if (browser.browserType().name() === 'chromium')
+        await page.pdf({
+          path: path.join(artifacts, `${id}-print.pdf`),
+          format: 'A4',
+        });
       await page.emulateMedia({ media: 'screen' });
     }
     await chooseCase('absence');
@@ -527,10 +530,10 @@ export async function scenariosJourney(browser, baseURL, artifacts) {
       await page.locator('#case-progress-count').textContent(),
       '0/6 tehty',
     );
-    assert.deepEqual(requests, [], 'no HTTP requests');
+    assert.deepEqual(requests, [], 'no external service requests');
     assert.deepEqual(errors, [], 'no page, console or local-resource failures');
     console.log(
-      `PASS: all remaining cases on offline file://; absence priorities/dates/delegation, clipboard failure/success/stale result, baby filters/readiness/timing, pet precedence/observations/stale service guard, persistence, mobile, print and accessibility. Artifacts: ${artifacts}`,
+      `PASS: all remaining cases over HTTP; absence priorities/dates/delegation, clipboard failure/success/stale result, baby filters/readiness/timing, pet precedence/observations/stale service guard, persistence, mobile, print and accessibility. Artifacts: ${artifacts}`,
     );
   } finally {
     /* Browser lifecycle belongs to Playwright. */

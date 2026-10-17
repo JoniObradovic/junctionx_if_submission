@@ -321,10 +321,10 @@ export async function languageJourney(browser, baseURL, artifacts) {
       await page.locator('[data-language="fi"]').getAttribute('aria-pressed'),
       'true',
     );
-    assert.deepEqual(network, [], 'no HTTP requests');
+    assert.deepEqual(network, [], 'no external service requests');
     assert.deepEqual(errors, [], 'no page or console errors');
     console.log(
-      'PASS: offline bilingual journey, analytics, responsive views and no external requests',
+      'PASS: bilingual HTTP journey, analytics, responsive views and no external requests',
     );
     await context.close();
   } finally {

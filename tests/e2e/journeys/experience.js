@@ -8,7 +8,9 @@ const axePath = require.resolve('axe-core/axe.min.js');
 export async function experienceJourney(browser, baseURL, artifacts) {
   fs.mkdirSync(artifacts, { recursive: true });
   try {
-    console.log(`Browser: Chromium ${browser.version()}`);
+    console.log(
+      `Browser: ${browser.browserType().name()} ${browser.version()}`,
+    );
     const context = await browser.newContext({
       viewport: { width: 1440, height: 1000 },
     });
@@ -398,10 +400,11 @@ export async function experienceJourney(browser, baseURL, artifacts) {
     }
     await capture('personnel-mobile.png');
     await page.emulateMedia({ media: 'print', reducedMotion: 'reduce' });
-    await page.pdf({
-      path: path.join(artifacts, 'personnel-print.pdf'),
-      format: 'A4',
-    });
+    if (browser.browserType().name() === 'chromium')
+      await page.pdf({
+        path: path.join(artifacts, 'personnel-print.pdf'),
+        format: 'A4',
+      });
     await page.emulateMedia({ media: 'screen' });
     await page.reload();
     assert.equal(
@@ -419,7 +422,7 @@ export async function experienceJourney(browser, baseURL, artifacts) {
     assert.deepEqual(errors, []);
     assert.deepEqual(network, []);
     console.log(
-      'PASS: all profile/scenario combinations, single relevant pet contact and emergency precedence, filtered benefits/travel tasks/owned baby cover, independent state, read-only cohort analytics, empty filters, mobile, print and offline.',
+      'PASS: all profile/scenario combinations, single relevant pet contact and emergency precedence, filtered benefits/travel tasks/owned baby cover, independent state, read-only cohort analytics, empty filters, mobile, print and no external requests.',
     );
   } finally {
     /* Browser lifecycle belongs to Playwright. */
