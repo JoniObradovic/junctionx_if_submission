@@ -21,6 +21,14 @@ for (const entry of ['index.html#asiakas', 'personnel.html']) {
     await expect(shared.locator('html')).toHaveAttribute('lang', 'en');
     await page.reload();
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+    if (entry.startsWith('index')) {
+      await expect(page.locator('.prototype-note')).toContainText(
+        'Explore with fictional details',
+      );
+      await expect(page.locator('.site-footer')).toContainText(
+        'Fictional demo',
+      );
+    }
   });
 }
 test('approved PDF is available at its original public path', async ({
