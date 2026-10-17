@@ -19,7 +19,7 @@ works offline. Select **EN** or **FI** in the top corner to change language.
 - **[If staff](personnel.html):** explore synthetic customer analytics with
   filters that update the totals, charts and customer table together.
 
-**[Pitch deck — five-slide English PDF](presentation/If-rinnalla-demo-EN.pdf)**
+**[Pitch deck — standalone English PDF](presentation/If-rinnalla-demo-EN.pdf)**
 
 ## A short walkthrough
 
