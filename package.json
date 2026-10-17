@@ -1,0 +1,37 @@
+{
+  "name": "if-rinnalla",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Trust-first life-situation insurance companion prototype",
+  "engines": {
+    "node": ">=24.22.0 <25",
+    "npm": ">=11 <12"
+  },
+  "packageManager": "npm@11.19.1",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5001 --strictPort",
+    "preview": "vite preview --host 127.0.0.1 --port 5001 --strictPort",
+    "build": "vite build",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "check:content": "vitest run tests/unit/content.test.ts",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build"
+  },
+  "devDependencies": {
+    "vite": "8.3.4",
+    "vitest": "5.0.5",
+    "typescript": "6.0.3",
+    "@playwright/test": "1.64.1",
+    "@axe-core/playwright": "4.14.0",
+    "eslint": "10.13.0",
+    "@eslint/js": "10.0.1",
+    "typescript-eslint": "8.71.2",
+    "@types/node": "24.19.2",
+    "prettier": "3.9.10"
+  }
+}

@@ -1,85 +1,70 @@
 # If rinnalla
 
-**One small step today. A more carefree tomorrow.**
+**Small actions today. Greater peace of mind tomorrow.**
 
-A bilingual life-situation companion that helps people prevent problems,
-understand relevant insurance information and find useful support before a
-claim happens. Built for the JunctionX challenge **If Insurance Could Do More**.
+A hackathon prototype exploring how an insurer can earn trust before a claim:
+practical prevention guidance, transparent illustrative rewards and useful help
+for new and existing customers.
 
-## Try the demo
-
-Open **[index.html](index.html)** in a browser. No installation, build, server or
-account is required. Keep the supplied folders together; the application also
-works offline. Select **EN** or **FI** in the top corner to change language.
-
-- **New customer:** explore practical preparations and insurance questions
-  without assuming an existing policy or customer benefit.
-- **Existing customer:** select a fictional insurance portfolio and see the
-  guidance, example price and relevant services change.
-- **[If staff](personnel.html):** explore synthetic customer analytics with
-  filters that update the totals, charts and customer table together.
-
-**[Pitch deck — standalone English PDF](presentation/If-rinnalla-demo-EN.pdf)**
-
-## A short walkthrough
-
-1. **New home:** choose Existing customer with Home, dog and travel insurance.
-   Complete the kitchen leak checks and floor-drain cleaning. The illustrative
-   annual premium changes from **€529.20 to €513.00**; undo a task to reverse it.
-   Open the pipework task and change its year to explore the separate,
-   conditional age-deduction example.
-2. **Home away:** switch between winter and summer, adjust the trip duration
-   and select tasks for a neighbour. The checklist and shareable message update
-   immediately. Copying also offers selectable text for manual copying.
-3. **First baby:** switch between new and second-hand equipment and filter by
-   topic. Safety checks adapt to the equipment; insurance guidance also adapts
-   to the selected customer profile.
-4. **Pet wellbeing:** a dog-insured example shows If Eläinapu contact guidance.
-   Switch to Home insurance only to see the proposed complimentary contact.
-   Emergency signs always replace the remote-service route with urgent guidance.
-5. **If staff:** filter the policy type to Dog insurance. Three fictional
-   customers become one matching customer, with all analytics following the
-   same selection.
-
-The information buttons explain the reasoning and business hypotheses. Source
-details next to guidance show the publisher, document/version, checked date,
-applicability and limitations.
+[Open the English demo](https://joniobradovic.github.io/junctionx_if_submission/?lang=en) ·
+[Existing customer](https://joniobradovic.github.io/junctionx_if_submission/?lang=en#asiakas) ·
+[Staff analytics](https://joniobradovic.github.io/junctionx_if_submission/personnel.html?lang=en) ·
+[Pitch deck (PDF)](https://joniobradovic.github.io/junctionx_if_submission/presentation/If-rinnalla-demo-EN.pdf)
 
 ## What the prototype demonstrates
 
-Four situations share one reactive workspace: new home, home away, first baby
-and pet wellbeing. New and existing customers receive different introductions,
-policy prompts and service routes. The separate staff view is analytical.
+- Four situations: a new home, leaving home empty, a first baby and pet wellbeing.
+- Different guidance for visitors and fictional customers with different policies.
+- A proposed prevention reward: completed eligible actions change a fictional premium.
+- A proposed one-use pet-help introduction for existing customers without pet cover.
+- Read-only staff analytics from three invented customer records.
+- Finnish and English views, accessible controls and responsive layouts.
 
-The product hypothesis is that timely, understandable actions and relevant
-support can improve customer confidence and reduce avoidable problems. Claims
-savings, retention and satisfaction improvements have **not been measured**.
+All customers, policies and prices are fictional. Rewards and the complimentary
+contact are **product proposals**, not current If offers. Published benefits have
+sources and applicability limits. No measured claims-success percentage is known.
+Pet guidance is not diagnosis; emergency instructions override insurance eligibility.
+No booking, message, quote or insurance transaction is sent. State stays in memory
+and resets on reload. Do not enter real personal or health information.
 
-All customer records, prices and analytics are fictional. The task-based
-prevention discount and complimentary pet-support contact are **product
-proposals, not current If offers**. Actual eligibility, pricing and cover depend
-on the customer's contract and the applicable terms. Task completion does not
-prove safety, approve a discount or guarantee a successful claim.
+## Develop
 
-Service actions only simulate a handoff: nothing is sent, booked, purchased or
-connected. Role selection is not authentication. State stays in the page's
-memory and resets on reload; there is no backend, telemetry or persistent
-storage. The prototype uses prepared rules and content, not a live AI model or
-medical diagnosis. Guidance uses a **2026** reference year; source metadata was
-checked on **17 October 2026**. Opening external source links requires internet
-access; using the demo does not.
+Use Node **24.22.0** and npm **11** (versions are pinned in `.node-version` and
+`package.json`). With nvm: `nvm install && nvm use`.
 
-## Technologies and source
+```sh
+npm ci
+npm run dev
+```
 
-Plain **HTML, CSS and vanilla JavaScript**, with local SVG icons and system
-fonts. There are no runtime dependencies or build steps.
+Open `http://localhost:5001/junctionx_if_submission/`. On an SSH host, forward
+port 5001: `ssh -N -L 5001:localhost:5001 your-host`. Existing 3000/5000 tunnels
+can stay open. The hosted demo needs only a browser; development uses a build.
+Opening the source HTML directly through `file://` is no longer supported.
 
-- `index.html` and `personnel.html`: customer workspace and staff analytics.
-- `css/nordic-theme.css`: responsive If-inspired styling.
-- `js/app.js`: state, calculations, rendering and interactions.
-- `knowledge/*.js`: Finnish content, English translations, rules and sources.
-- `assets/icons.js`: local icon definitions.
+## Quality checks
 
-Both pages load classic scripts in order: icons, the four numbered knowledge
-modules, then the application. This keeps the source editable and permits
-direct `file:///` use as well as static web hosting.
+```sh
+npm run check              # formatting, lint, types, content/domain tests and build
+npx playwright install --with-deps
+npm run test:e2e           # production build: Chromium, Firefox, WebKit and mobile
+npm run preview            # inspect dist/ over HTTP on port 5001
+```
+
+`npm run check:content` checks source references and translation applicability;
+it does not verify the truth or continuing validity of an insurance/health claim.
+Browser tests exercise all four cases, profiles, bilingual copy, keyboard/focus,
+clipboard fallback, one-use contact, emergency precedence and automated accessibility.
+Automated accessibility checks do not replace real assistive-technology testing.
+
+## Source and delivery
+
+`src/` is the application source, `tests/` contains repository-local checks and
+`public/presentation/` holds the approved PDF. Only the built `dist/` artifact is
+published to GitHub Pages. Both `index.html` and `personnel.html` remain supported.
+See [architecture](docs/ARCHITECTURE.md), [contributing](CONTRIBUTING.md) and
+[release/rollback](docs/RELEASE.md). No backend or runtime service is required.
+
+This is an independent prototype for the If challenge, not an official If service.
+Brand references are for demonstration. Public source licensing and credit are
+separate submission decisions; no license grant is implied by this README.

@@ -3,3 +3,8 @@ Thumbs.db
 .env
 .env.*
 *.log
+node_modules/
+dist/
+playwright-report/
+test-results/
+coverage/
