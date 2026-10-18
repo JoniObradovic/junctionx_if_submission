@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="fi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#FAF9F7" />
+    <title>IF Lähellä — Asiakkuusanalytiikka</title>
+    <link rel="icon" href="data:," />
+  </head>
+  <body data-page="personnel">
+    <a class="skip-link" href="#workspace" data-i18n="shell.skipWorkspace"
+      >Siirry työtilaan</a
+    >
+    <header class="site-header">
+      <div class="brand" aria-label="IF Lähellä">
+        <span class="brand-mark" aria-hidden="true">if</span
+        ><span
+          >Lähellä<span class="brand-subtitle" data-i18n="shell.staffSubtitle"
+            >Asiakkuusanalytiikka · demo</span
+          ></span
+        >
+      </div>
+      <nav
+        class="audience-nav"
+        aria-label="Demon näkymä"
+        data-i18n-aria-label="shell.roleLabel"
+      >
+        <a href="./index.html#tutustu" data-i18n="role.newCustomer"
+          >Uusi asiakas</a
+        ><a href="./index.html#asiakas" data-i18n="role.existingCustomer"
+          >Nykyinen asiakas</a
+        ><a href="./personnel.html" aria-current="page" data-i18n="role.staff"
+          >Ifin henkilöstö</a
+        >
+      </nav>
+      <div class="header-tools">
+        <a href="./index.html" data-i18n="shell.backToCustomers"
+          >Takaisin asiakasnäkymiin</a
+        >
+        <div class="language-switch" role="group" aria-label="Kieli / Language">
+          <button
+            type="button"
+            data-language="fi"
+            lang="fi"
+            aria-pressed="true"
+          >
+            FI<span class="sr-only"> · Suomi</span></button
+          ><button
+            type="button"
+            data-language="en"
+            lang="en"
+            aria-pressed="false"
+          >
+            EN<span class="sr-only"> · English</span>
+          </button>
+        </div>
+      </div>
+    </header>
+    <main class="page staff-page">
+      <h1 id="staff-title" data-i18n="shell.analytics">Asiakkuusanalytiikka</h1>
+      <p id="staff-subtitle"></p>
+      <p class="limitation" id="staff-notice"></p>
+      <section
+        id="workspace"
+        tabindex="-1"
+        aria-labelledby="staff-title"
+      ></section>
+      <noscript>
+        <p class="card" data-i18n="shell.enableStaffJavaScript">
+          Ota JavaScript käyttöön nähdäksesi kuvitteellisen työtilan.
+        </p>
+      </noscript>
+      <footer class="site-footer">
+        <span class="footer-brand">IF Lähellä</span
+        ><span data-i18n="shell.staffNotice"
+          >Henkilöstödemo · vain keksittyä aineistoa · mitään ei lähetetä</span
+        >
+      </footer>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

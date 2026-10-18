@@ -1,0 +1,142 @@
+.filter-controls,
+.analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-5);
+}
+.filter-controls label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: var(--space-2);
+}
+.analytics-filters h2,
+#staff-report h2 {
+  font-size: 1.2rem;
+}
+#staff-filter-result {
+  margin: var(--space-3) 0 0;
+}
+.analytics-bars {
+  list-style: none;
+  padding: 0;
+  margin: var(--space-5) 0 0;
+  display: grid;
+  gap: var(--space-4);
+}
+.analytics-bars li > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: 0.85rem;
+  margin-bottom: var(--space-2);
+}
+.analytics-bars strong {
+  white-space: nowrap;
+}
+.analytics-track {
+  height: 8px;
+  border-radius: 8px;
+  background: var(--bg-subtle);
+  overflow: hidden;
+}
+.analytics-track span {
+  display: block;
+  height: 100%;
+  background: var(--if-blue);
+  border-radius: inherit;
+}
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  min-width: 0;
+}
+.table-scroll table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 460px;
+  font-size: 0.82rem;
+  text-align: left;
+}
+#staff-customer-table {
+  min-width: 780px;
+}
+.table-scroll caption {
+  text-align: left;
+  color: var(--text-muted);
+  font-size: var(--font-caption);
+  margin-bottom: var(--space-4);
+}
+.table-scroll th,
+.table-scroll td {
+  padding: var(--space-3);
+  vertical-align: top;
+  border-bottom: 1px solid var(--border-color);
+}
+.table-scroll thead th {
+  background: var(--bg-primary);
+}
+.table-scroll th .small-label {
+  display: block;
+  font-weight: 400;
+}
+.table-scroll details {
+  min-width: 160px;
+}
+.table-scroll details > p {
+  max-width: 240px;
+  margin-top: var(--space-3);
+}
+.table-policies {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.table-policies li + li {
+  margin-top: var(--space-2);
+}
+.empty-state {
+  padding: var(--space-5) 0;
+  color: var(--text-muted);
+}
+.portfolio-options {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.route-card .emergency-boundary {
+  border-top: 1px solid var(--border-color);
+  padding-top: var(--space-4);
+  margin: var(--space-5) 0 0;
+}
+.emergency-boundary h4 {
+  font-size: 0.9rem;
+  margin: 0 0 var(--space-2);
+}
+.emergency-boundary p:last-of-type {
+  margin-bottom: 0;
+}
+@media (max-width: 720px) {
+  .filter-controls,
+  .analytics-grid,
+  .portfolio-options {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media print {
+  .analytics-filters {
+    display: none;
+  }
+  .table-scroll {
+    overflow: visible;
+  }
+  .table-scroll table,
+  #staff-customer-table {
+    min-width: 0;
+    font-size: 0.7rem;
+  }
+}
+.support-grid > :only-child {
+  grid-column: 1 / -1;
+}
+.staff-page > h1 {
+  font-size: clamp(1.4rem, 3vw, 2.2rem);
+}
